@@ -27,7 +27,8 @@ jobs:
         run: npm install
 
       - name: Build frontend
-        run: npm run build --workspace=@nexus/web
+        working-directory: apps/web
+        run: npm run build
 
       - name: Configure Pages
         uses: actions/configure-pages@v4

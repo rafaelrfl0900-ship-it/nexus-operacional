@@ -3,6 +3,8 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   output: "export",
+  basePath: "/nexus-operacional",
+  trailingSlash: true,
   devIndicators: false,
   images: {
     unoptimized: true

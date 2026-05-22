@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev --hostname 0.0.0.0 --port 3000",
     "build": "next build",
-    "export": "next build",
+    "export": "next export --outdir .next/export",
     "start": "next start --hostname 0.0.0.0 --port 3000",
     "lint": "next lint",
     "typecheck": "tsc --noEmit"
