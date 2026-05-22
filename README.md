@@ -32,8 +32,57 @@ npm.cmd run dev
 If Docker is installed:
 
 ```powershell
-docker compose up --build
+docker compose up -d --build
 ```
+
+### Deploy with Docker Compose
+
+Create a local `.env` from the example and update secrets and public URLs:
+
+```powershell
+copy .env.example .env
+```
+
+Edit `.env` and set:
+- `POSTGRES_PASSWORD`
+- `JWT_ACCESS_SECRET`
+- `JWT_REFRESH_SECRET`
+- `WEB_ORIGIN` to your public frontend URL
+- `NEXT_PUBLIC_API_URL` to your public API URL
+- `DATABASE_URL` to point to your production database
+
+Then start the stack:
+
+```powershell
+docker compose up -d --build
+```
+
+Apply Prisma migrations and seed data:
+
+```powershell
+docker compose exec api npx prisma migrate deploy
+docker compose exec api npm run prisma:seed
+```
+
+If you need a lightweight production deployment on the same host, you can keep using the same `docker-compose.yml` with the production values in `.env`.
+
+## Public deployment
+
+The repository now includes a GitHub Actions workflow that builds and exports the frontend statically on every push to `main`.
+
+- Frontend build: `npm run build --workspace=@nexus/web`
+- Static export: `npm run export --workspace=@nexus/web`
+- Pages artifact: `apps/web/out`
+
+When GitHub Pages is enabled for this repository, the frontend will be published at:
+
+```text
+https://rafaelrfl0900-ship-it.github.io/nexus-operacional/
+```
+
+> Note: this GitHub Pages deployment publishes the frontend only. The full API/backend still needs a public host or Docker Compose server deployment.
+
+For a full production deployment with API + PostgreSQL, host the repository on a server or a managed platform such as Render, Railway or a VPS, then use the current `docker-compose.yml` and `.env` values.
 
 ## Important URLs
 
