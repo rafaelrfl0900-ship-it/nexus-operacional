@@ -68,11 +68,10 @@ If you need a lightweight production deployment on the same host, you can keep u
 
 ## Public deployment
 
-The repository now includes a GitHub Actions workflow that builds and exports the frontend statically on every push to `main`.
+The repository now includes a GitHub Actions workflow that builds the frontend statically on every push to `main`.
 
 - Frontend build: `npm run build --workspace=@nexus/web`
-- Static export: `npm run export --workspace=@nexus/web`
-- Pages artifact: `apps/web/out`
+- Pages artifact: `apps/web/.next/export`
 
 When GitHub Pages is enabled for this repository, the frontend will be published at:
 
@@ -83,6 +82,8 @@ https://rafaelrfl0900-ship-it.github.io/nexus-operacional/
 > Note: this GitHub Pages deployment publishes the frontend only. The full API/backend still needs a public host or Docker Compose server deployment.
 
 For a full production deployment with API + PostgreSQL, host the repository on a server or a managed platform such as Render, Railway or a VPS, then use the current `docker-compose.yml` and `.env` values.
+
+See `docs/production-deploy.md` for a step-by-step production deployment guide.
 
 ## Important URLs
 
