@@ -29,9 +29,6 @@ jobs:
       - name: Build frontend
         run: npm run build --workspace=@nexus/web
 
-      - name: Export static frontend
-        run: npm run export --workspace=@nexus/web
-
       - name: Configure Pages
         uses: actions/configure-pages@v4
 
