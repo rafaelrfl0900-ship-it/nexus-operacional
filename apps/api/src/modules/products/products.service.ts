@@ -1,0 +1,117 @@
+import { Injectable, NotFoundException } from "@nestjs/common";
+import { PrismaService } from "../../infrastructure/database/prisma.service";
+import { productSchema } from "../../domain/validators/schemas";
+import { AuditService } from "../audit/audit.service";
+
+@Injectable()
+export class ProductsService {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly audit: AuditService
+  ) {}
+
+  list(query: { active?: string; search?: string }) {
+    return this.prisma.product.findMany({
+      where: {
+        deletedAt: null,
+        active: query.active === undefined ? undefined : query.active === "true",
+        OR: query.search
+          ? [
+              { code: { contains: query.search, mode: "insensitive" } },
+              { name: { contains: query.search, mode: "insensitive" } }
+            ]
+          : undefined
+      },
+      include: { defaultSector: true, weightConfig: true },
+      orderBy: [{ active: "desc" }, { code: "asc" }]
+    });
+  }
+
+  async create(payload: unknown) {
+    const input = productSchema.parse(payload);
+    const sector = await this.prisma.sector.findUniqueOrThrow({ where: { code: input.defaultSector } });
+    const product = await this.prisma.product.create({
+      data: {
+        code: input.code,
+        name: input.name,
+        defaultSectorId: sector.id,
+        unit: input.unit,
+        notes: input.notes,
+        weightConfig: {
+          create: {
+            packageWeightKg: input.packageWeightKg,
+            boxWeightKg: input.boxWeightKg,
+            packagesPerBox: input.packagesPerBox,
+            massWeightKg: input.massWeightKg,
+            targetPackageWeightG: input.targetPackageWeightG,
+            overweightTolerancePercent: input.overweightTolerancePercent,
+            formula: input.formula
+          }
+        }
+      },
+      include: { defaultSector: true, weightConfig: true }
+    });
+
+    await this.audit.record({ module: "products", action: "create", entity: "Product", entityId: product.id, after: product });
+    return product;
+  }
+
+  async update(id: string, payload: unknown) {
+    const input = productSchema.partial().parse(payload);
+    const current = await this.prisma.product.findUnique({ where: { id }, include: { weightConfig: true } });
+    if (!current) throw new NotFoundException("Produto nao encontrado.");
+
+    const sector = input.defaultSector
+      ? await this.prisma.sector.findUniqueOrThrow({ where: { code: input.defaultSector } })
+      : undefined;
+
+    const product = await this.prisma.product.update({
+      where: { id },
+      data: {
+        code: input.code,
+        name: input.name,
+        defaultSectorId: sector?.id,
+        unit: input.unit,
+        notes: input.notes,
+        weightConfig: input.boxWeightKg
+          ? {
+              upsert: {
+                create: {
+                  packageWeightKg: input.packageWeightKg ?? 0,
+                  boxWeightKg: input.boxWeightKg,
+                  packagesPerBox: input.packagesPerBox ?? 1,
+                  massWeightKg: input.massWeightKg ?? 0,
+                  targetPackageWeightG: input.targetPackageWeightG ?? 1,
+                  overweightTolerancePercent: input.overweightTolerancePercent ?? 0.02,
+                  formula: input.formula ?? "BOX_WEIGHT"
+                },
+                update: {
+                  packageWeightKg: input.packageWeightKg,
+                  boxWeightKg: input.boxWeightKg,
+                  packagesPerBox: input.packagesPerBox,
+                  massWeightKg: input.massWeightKg,
+                  targetPackageWeightG: input.targetPackageWeightG,
+                  overweightTolerancePercent: input.overweightTolerancePercent,
+                  formula: input.formula
+                }
+              }
+            }
+          : undefined
+      },
+      include: { defaultSector: true, weightConfig: true }
+    });
+
+    await this.audit.record({ module: "products", action: "update", entity: "Product", entityId: id, before: current, after: product });
+    return product;
+  }
+
+  async deactivate(id: string) {
+    const product = await this.prisma.product.update({
+      where: { id },
+      data: { active: false },
+      include: { defaultSector: true, weightConfig: true }
+    });
+    await this.audit.record({ module: "products", action: "deactivate", entity: "Product", entityId: id, after: product });
+    return product;
+  }
+}

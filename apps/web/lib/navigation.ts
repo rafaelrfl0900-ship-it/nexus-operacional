@@ -1,0 +1,41 @@
+import {
+  Activity,
+  Archive,
+  BarChart3,
+  Boxes,
+  CalendarDays,
+  ClipboardList,
+  Database,
+  FileSpreadsheet,
+  Gauge,
+  History,
+  Lock,
+  Presentation,
+  Settings,
+  ShieldCheck,
+  Target,
+  TimerReset,
+  Users
+} from "lucide-react";
+
+export const navigation = [
+  { href: "/", label: "Menu principal", icon: Boxes },
+  { href: "/dashboard", label: "Dashboard geral", icon: BarChart3 },
+  { href: "/producao/p1", label: "Producao P1", icon: Activity },
+  { href: "/producao/p2", label: "Producao P2", icon: Gauge },
+  { href: "/perdas", label: "Controle de perdas", icon: ClipboardList },
+  { href: "/sobrepeso", label: "Sobrepeso", icon: Target },
+  { href: "/paradas", label: "Paradas", icon: TimerReset },
+  { href: "/produtividade", label: "Produtividade", icon: Gauge },
+  { href: "/produtos", label: "Produtos", icon: Database },
+  { href: "/semanas", label: "Semanas", icon: CalendarDays },
+  { href: "/historico", label: "Historico", icon: History },
+  { href: "/relatorios", label: "Relatorios", icon: FileSpreadsheet },
+  { href: "/apresentacoes", label: "Modo reuniao", icon: Presentation },
+  { href: "/metas", label: "Metas", icon: Target },
+  { href: "/usuarios", label: "Usuarios", icon: Users },
+  { href: "/auditoria", label: "Auditoria", icon: ShieldCheck },
+  { href: "/importacao", label: "Importacao Excel", icon: Archive },
+  { href: "/configuracoes", label: "Configuracoes", icon: Settings },
+  { href: "/backups", label: "Backups", icon: Lock }
+];
