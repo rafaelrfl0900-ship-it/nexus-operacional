@@ -1,31 +1,39 @@
+import { legacyData, legacyDowntimeEntries, legacyOverweightRanking, legacyProductivitySummary } from "@/lib/legacy-data";
+
+const dayLabels = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sab"];
+
 export const kpis = [
-  { label: "Producao total", value: 50910.4, suffix: "kg", status: "OK" },
-  { label: "Perdas totais", value: 74.31, suffix: "kg", status: "ATTENTION" },
-  { label: "Sobrepeso total", value: 441.68, suffix: "kg", status: "ATTENTION" },
-  { label: "Sobrepeso medio", value: 0.0087, suffix: "%", status: "OK" },
-  { label: "Rendimento medio", value: 0.9866, suffix: "%", status: "OK" },
-  { label: "Tempo parado", value: 941.16, suffix: "min", status: "MEDIUM" }
+  { label: "Producao total", value: legacyData.dashboard.producedKg, suffix: "kg", status: "OK" },
+  { label: "Perdas totais", value: legacyData.dashboard.lossesKg, suffix: "kg", status: legacyData.dashboard.lossesKg > 50 ? "ATTENTION" : "OK" },
+  { label: "Sobrepeso total", value: legacyData.dashboard.overweightKg, suffix: "kg", status: legacyData.dashboard.overweightKg > 100 ? "ATTENTION" : "OK" },
+  { label: "Sobrepeso medio", value: legacyData.dashboard.overweightPercent, suffix: "%", status: legacyData.dashboard.overweightPercent > 0.02 ? "ATTENTION" : "OK" },
+  { label: "Rendimento medio", value: legacyData.dashboard.averageYield, suffix: "%", status: legacyData.dashboard.averageYield >= 0.95 ? "OK" : "ATTENTION" },
+  { label: "Tempo parado", value: legacyData.dashboard.downtimeMinutes, suffix: "min", status: legacyData.dashboard.downtimeMinutes > 120 ? "MEDIUM" : "OK" }
 ];
 
-export const productionByDay = [
-  { day: "Seg", p1: 12330, p2: 120, losses: 20.98, overweight: 109.44, yield: 1.038 },
-  { day: "Ter", p1: 9048, p2: 92, losses: 0, overweight: 96.8, yield: 1.01 },
-  { day: "Qua", p1: 8486, p2: 0, losses: 0, overweight: 204.4, yield: 0.98 },
-  { day: "Qui", p1: 10020, p2: 110, losses: 18.3, overweight: 52.2, yield: 0.96 },
-  { day: "Sex", p1: 10594, p2: 110, losses: 35.03, overweight: 79.0, yield: 0.95 }
-];
+export const productionByDay = legacyProductivitySummary.daily.slice(0, 7).map((row) => ({
+  day: dayLabels[new Date(`${row.date}T00:00:00`).getDay()] ?? row.date.slice(5),
+  p1: row.producedKg,
+  p2: 0,
+  losses: legacyData.dashboard.lossesKg / Math.max(legacyProductivitySummary.daily.length, 1),
+  overweight: legacyData.dashboard.overweightKg / Math.max(legacyProductivitySummary.daily.length, 1),
+  yield: row.averageYield
+}));
 
-export const downtimeByReason = [
-  { reason: "Troca de arame", minutes: 180 },
-  { reason: "Aguardando embalagem", minutes: 165 },
-  { reason: "Aguardando massa", minutes: 140 },
-  { reason: "Aguardando congelar", minutes: 92 },
-  { reason: "Limpeza", minutes: 70 }
-];
+const downtimeTotals = legacyDowntimeEntries.reduce<Record<string, number>>((acc, entry) => {
+  const reason = entry.reason?.name ?? "Sem motivo";
+  acc[reason] = (acc[reason] ?? 0) + Number(entry.stoppedMinutes ?? 0);
+  return acc;
+}, {});
 
-export const topProducts = [
-  { code: "72169", name: "PQ Rei do Mate 13g x 1kg", producedKg: 15816, overweightKg: 142.34 },
-  { code: "72170", name: "PQ Rei do Mate 60g x 1kg", producedKg: 2496, overweightKg: 0 },
-  { code: "69903", name: "Palito Gratinado 60g", producedKg: 1878, overweightKg: 0 },
-  { code: "76678", name: "Produto congelado especial", producedKg: 15218, overweightKg: 85.82 }
-];
+export const downtimeByReason = Object.entries(downtimeTotals)
+  .map(([reason, minutes]) => ({ reason, minutes }))
+  .sort((a, b) => b.minutes - a.minutes)
+  .slice(0, 8);
+
+export const topProducts = legacyOverweightRanking.slice(0, 8).map((row) => ({
+  code: row.code,
+  name: row.product,
+  producedKg: row.producedKg,
+  overweightKg: row.overweightKg
+}));

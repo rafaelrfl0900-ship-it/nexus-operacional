@@ -7,6 +7,7 @@ import { DataTable } from "@/components/tables/data-table";
 import { Button } from "@/components/ui/button";
 import { Card, StatCard } from "@/components/ui/card";
 import { formatKg, formatPercent } from "@/lib/format";
+import { legacyOverweightRanking, legacyWeeks, preferredLegacyWeekId } from "@/lib/legacy-data";
 import { apiGetClient, getSession } from "@/services/api";
 
 interface WeekRow {
@@ -27,16 +28,13 @@ interface OverweightRow {
   status: string;
 }
 
-const fallbackRanking: OverweightRow[] = [
-  { productId: "legacy-72169", code: "72169", product: "PAO DE QUEIJO REI DO MATE 13g x 1kg", sector: "P1", overweightKg: 142.3, producedKg: 15800, overweightPercent: 0.009, tolerancePercent: 0.02, status: "OK" },
-  { productId: "legacy-70974", code: "70974", product: "Produto com codigo duplicado no legado", sector: "P1", overweightKg: 72.7, producedKg: 2420, overweightPercent: 0.03, tolerancePercent: 0.02, status: "ATTENTION" }
-];
+const fallbackRanking = legacyOverweightRanking as OverweightRow[];
 
 export default function OverweightPage() {
-  const [weeks, setWeeks] = useState<WeekRow[]>([]);
-  const [weekId, setWeekId] = useState("");
+  const [weeks, setWeeks] = useState<WeekRow[]>(legacyWeeks);
+  const [weekId, setWeekId] = useState(preferredLegacyWeekId());
   const [ranking, setRanking] = useState<OverweightRow[]>(fallbackRanking);
-  const [message, setMessage] = useState("Aguardando login para carregar ranking real.");
+  const [message, setMessage] = useState(`${fallbackRanking.length} produto(s) no ranking da planilha local.`);
   const [loading, setLoading] = useState(false);
   const token = useMemo(() => getSession()?.accessToken, []);
 
@@ -53,7 +51,9 @@ export default function OverweightPage() {
       setRanking(data.length ? data : fallbackRanking);
       setMessage(data.length ? "Ranking de sobrepeso carregado da API." : "Sem producao na semana selecionada; exibindo amostra operacional.");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Sobrepeso demonstrativo em uso.");
+      setWeeks(legacyWeeks);
+      setRanking(fallbackRanking);
+      setMessage(error instanceof Error ? `${error.message} Ranking da planilha local em uso.` : "Ranking da planilha local em uso.");
     } finally {
       setLoading(false);
     }

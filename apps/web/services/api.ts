@@ -17,13 +17,14 @@ const localAdminPassword = process.env.NEXT_PUBLIC_LOCAL_ADMIN_PASSWORD ?? "Chan
 const localAdminName = process.env.NEXT_PUBLIC_LOCAL_ADMIN_NAME ?? "Administrador Nexus";
 const localAdminDefaultEnabled = /^https?:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/.test(API_URL);
 const localAdminEnabled = (process.env.NEXT_PUBLIC_ENABLE_LOCAL_ADMIN ?? String(localAdminDefaultEnabled)) === "true";
+const localAdminToken = "local-admin-session";
 
 export function createLocalAdminSession(email: string, password: string): SessionData | null {
   if (!localAdminEnabled) return null;
   if (email.trim().toLowerCase() !== localAdminEmail.toLowerCase() || password !== localAdminPassword) return null;
 
   return {
-    accessToken: "local-admin-session",
+    accessToken: localAdminToken,
     user: {
       id: "local-admin",
       email: localAdminEmail,
@@ -31,6 +32,10 @@ export function createLocalAdminSession(email: string, password: string): Sessio
       roles: ["ADMIN"]
     }
   };
+}
+
+export function isLocalAdminSessionToken(token?: string) {
+  return token === localAdminToken;
 }
 
 export function isNetworkAuthError(error: unknown) {
@@ -64,6 +69,10 @@ export async function apiPost<T>(path: string, payload: unknown, fallback: T): P
 }
 
 export async function apiPostClient<T>(path: string, payload: unknown, token?: string): Promise<T> {
+  if (isLocalAdminSessionToken(token)) {
+    throw new Error("API real indisponivel; usando dados da planilha local.");
+  }
+
   const response = await fetch(`${API_URL}${path}`, {
     method: "POST",
     headers: {
@@ -83,6 +92,10 @@ export async function apiPostClient<T>(path: string, payload: unknown, token?: s
 }
 
 export async function apiGetClient<T>(path: string, token?: string): Promise<T> {
+  if (isLocalAdminSessionToken(token)) {
+    throw new Error("API real indisponivel; usando dados da planilha local.");
+  }
+
   const response = await fetch(`${API_URL}${path}`, {
     headers: {
       ...(token ? { Authorization: `Bearer ${token}` } : {})
@@ -99,6 +112,10 @@ export async function apiGetClient<T>(path: string, token?: string): Promise<T> 
 }
 
 export async function apiPatchClient<T>(path: string, payload: unknown, token?: string): Promise<T> {
+  if (isLocalAdminSessionToken(token)) {
+    throw new Error("API real indisponivel; usando dados da planilha local.");
+  }
+
   const response = await fetch(`${API_URL}${path}`, {
     method: "PATCH",
     headers: {
@@ -118,6 +135,10 @@ export async function apiPatchClient<T>(path: string, payload: unknown, token?: 
 }
 
 export async function apiDeleteClient<T>(path: string, token?: string): Promise<T> {
+  if (isLocalAdminSessionToken(token)) {
+    throw new Error("API real indisponivel; usando dados da planilha local.");
+  }
+
   const response = await fetch(`${API_URL}${path}`, {
     method: "DELETE",
     headers: {

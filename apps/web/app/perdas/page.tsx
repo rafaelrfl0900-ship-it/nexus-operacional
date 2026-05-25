@@ -7,6 +7,7 @@ import { DataTable } from "@/components/tables/data-table";
 import { Button } from "@/components/ui/button";
 import { Card, StatCard } from "@/components/ui/card";
 import { formatKg } from "@/lib/format";
+import { legacyLossEntries, legacyLossTypes, legacyWeeks, preferredLegacyWeekId } from "@/lib/legacy-data";
 import { apiGetClient, apiPostClient, getSession } from "@/services/api";
 
 interface WeekRow {
@@ -29,34 +30,35 @@ interface LossEntryRow {
   lossType?: { name: string };
 }
 
-const fallbackRows = [
-  { Data: "2026-05-14", Setor: "P1", Tipo: "Pesagem", Quantidade: "35,26 kg", Motivo: "Legado" },
-  { Data: "2026-05-15", Setor: "P1", Tipo: "Embalagem", Quantidade: "18,30 kg", Motivo: "Legado" }
-];
-
 export default function LossesPage() {
-  const [weeks, setWeeks] = useState<WeekRow[]>([]);
-  const [types, setTypes] = useState<LossTypeRow[]>([]);
-  const [entries, setEntries] = useState<LossEntryRow[]>([]);
-  const [weekId, setWeekId] = useState("");
-  const [lossTypeId, setLossTypeId] = useState("");
+  const fallbackWeekId = preferredLegacyWeekId();
+  const fallbackEntries = useMemo(() => legacyLossEntries.filter((entry) => entry.weekId === fallbackWeekId), [fallbackWeekId]);
+  const [weeks, setWeeks] = useState<WeekRow[]>(legacyWeeks);
+  const [types, setTypes] = useState<LossTypeRow[]>(legacyLossTypes);
+  const [entries, setEntries] = useState<LossEntryRow[]>(fallbackEntries);
+  const [weekId, setWeekId] = useState(fallbackWeekId);
+  const [lossTypeId, setLossTypeId] = useState(legacyLossTypes[0]?.id ?? "");
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [sector, setSector] = useState<"P1" | "P2">("P1");
   const [quantityKg, setQuantityKg] = useState(10);
   const [reason, setReason] = useState("Lancamento operacional");
-  const [message, setMessage] = useState("Aguardando login para carregar perdas reais.");
+  const [message, setMessage] = useState(`${fallbackEntries.length} perda(s) carregada(s) da planilha local.`);
   const [loading, setLoading] = useState(false);
   const token = useMemo(() => getSession()?.accessToken, []);
 
   async function loadData(nextWeekId = weekId) {
-    if (!token) return;
+    const requestedWeek = nextWeekId || weekId || fallbackWeekId;
+    if (!token) {
+      setEntries(legacyLossEntries.filter((entry) => entry.weekId === requestedWeek));
+      return;
+    }
     setLoading(true);
     try {
       const [weekRows, typeRows] = await Promise.all([
         apiGetClient<WeekRow[]>("/weeks", token),
         apiGetClient<LossTypeRow[]>("/losses/types", token)
       ]);
-      const selectedWeek = nextWeekId || weekRows.find((week) => week.status !== "CLOSED" && week.status !== "ARCHIVED")?.id || weekRows[0]?.id || "";
+      const selectedWeek = requestedWeek || weekRows.find((week) => week.status !== "CLOSED" && week.status !== "ARCHIVED")?.id || weekRows[0]?.id || "";
       setWeeks(weekRows);
       setTypes(typeRows);
       setWeekId(selectedWeek);
@@ -67,7 +69,10 @@ export default function LossesPage() {
       }
       setMessage("Perdas carregadas da API.");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Perdas demonstrativas em uso.");
+      setWeeks(legacyWeeks);
+      setTypes(legacyLossTypes);
+      setEntries(legacyLossEntries.filter((entry) => entry.weekId === requestedWeek));
+      setMessage(error instanceof Error ? `${error.message} Perdas da planilha local em uso.` : "Perdas da planilha local em uso.");
     } finally {
       setLoading(false);
     }
@@ -103,7 +108,13 @@ export default function LossesPage() {
         Quantidade: formatKg(Number(entry.quantityKg)),
         Motivo: entry.reason ?? "-"
       }))
-    : fallbackRows;
+    : legacyLossEntries.slice(0, 10).map((entry) => ({
+        Data: entry.date.slice(0, 10),
+        Setor: entry.sector?.code ?? "-",
+        Tipo: entry.lossType?.name ?? "-",
+        Quantidade: formatKg(Number(entry.quantityKg)),
+        Motivo: entry.reason ?? "-"
+      }));
 
   return (
     <div className="space-y-6">

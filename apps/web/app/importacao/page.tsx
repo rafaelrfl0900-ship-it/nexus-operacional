@@ -6,6 +6,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { DataTable } from "@/components/tables/data-table";
 import { Button } from "@/components/ui/button";
 import { Card, StatCard } from "@/components/ui/card";
+import { legacyData } from "@/lib/legacy-data";
 import { apiGetClient, apiPostClient, getSession } from "@/services/api";
 
 interface ImportPreview {
@@ -32,14 +33,14 @@ interface ImportBatch {
 }
 
 const fallbackPreview: ImportPreview = {
-  source: "Relatorios - MAIO 2026 (9).xlsx",
-  sheetCount: 14,
-  formulaCount: 9865,
-  errors: { "#N/A": 565, "#REF!": 259, "#DIV/0!": 20, "#VALUE!": 6 },
+  source: legacyData.source,
+  sheetCount: legacyData.sheetCount,
+  formulaCount: legacyData.formulaCount,
+  errors: legacyData.errors,
   legacyData: {
-    productCount: 87,
-    duplicateWeightCodes: ["70974", "73735", "76379", "76678"],
-    importErrorCount: 127
+    productCount: legacyData.products.length,
+    duplicateWeightCodes: [],
+    importErrorCount: legacyData.importErrors.length
   }
 };
 
@@ -80,17 +81,16 @@ export default function ImportPage() {
   }
 
   const totalCachedErrors = Object.values(preview.errors ?? {}).reduce((sum, value) => sum + value, 0);
-  const duplicateCodes = preview.legacyData?.duplicateWeightCodes ?? [];
   const errorRows = batch?.errors?.length
     ? batch.errors.map((error) => ({
         Aba: error.sheetName ?? "-",
         Celula: error.cell ?? "-",
         Erro: error.message
       }))
-    : duplicateCodes.map((code) => ({
-        Aba: "Banco de Dados Pesagen",
-        Celula: "-",
-        Erro: `Codigo duplicado aguardando auditoria: ${code}`
+    : legacyData.importErrors.slice(0, 100).map((error) => ({
+        Aba: error.sheetName ?? "-",
+        Celula: error.cell ?? "-",
+        Erro: error.message
       }));
 
   return (

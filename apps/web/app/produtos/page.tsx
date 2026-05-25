@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, StatCard } from "@/components/ui/card";
 import { apiDeleteClient, apiGetClient, getSession } from "@/services/api";
 import { formatKg } from "@/lib/format";
+import { legacyProducts } from "@/lib/legacy-data";
 
 interface ProductRow {
   id: string;
@@ -23,15 +24,12 @@ interface ProductRow {
   } | null;
 }
 
-const fallbackProducts: ProductRow[] = [
-  { id: "legacy-72169", code: "72169", name: "PAO DE QUEIJO REI DO MATE 13g x 1kg", active: true, defaultSector: { code: "P1" }, weightConfig: { boxWeightKg: 12, packagesPerBox: 12, massWeightKg: 511, targetPackageWeightG: 1000 } },
-  { id: "legacy-73734", code: "73734", name: "BOLO TRUFADO 600GR", active: true, defaultSector: { code: "P2" }, weightConfig: { boxWeightKg: 1.2, packagesPerBox: 2, massWeightKg: 0.6, targetPackageWeightG: 600 } }
-];
+const fallbackProducts = legacyProducts as ProductRow[];
 
 export default function ProductsPage() {
   const [products, setProducts] = useState<ProductRow[]>(fallbackProducts);
   const [search, setSearch] = useState("");
-  const [message, setMessage] = useState("Aguardando login para carregar produtos reais.");
+  const [message, setMessage] = useState(`${fallbackProducts.length} produto(s) carregado(s) da planilha local.`);
   const [loading, setLoading] = useState(false);
   const token = useMemo(() => getSession()?.accessToken, []);
 
@@ -44,7 +42,8 @@ export default function ProductsPage() {
       setProducts(data);
       setMessage(`${data.length} produto(s) carregado(s) da API.`);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Catalogo local em uso.");
+      setProducts(fallbackProducts);
+      setMessage(error instanceof Error ? `${error.message} Catalogo da planilha local em uso.` : "Catalogo da planilha local em uso.");
     } finally {
       setLoading(false);
     }

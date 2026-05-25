@@ -7,6 +7,7 @@ import { DataTable } from "@/components/tables/data-table";
 import { Button } from "@/components/ui/button";
 import { Card, StatCard } from "@/components/ui/card";
 import { formatKg, formatPercent } from "@/lib/format";
+import { legacyProductivitySummary, legacyWeeks, preferredLegacyWeekId } from "@/lib/legacy-data";
 import { apiGetClient, getSession } from "@/services/api";
 
 interface WeekRow {
@@ -30,24 +31,13 @@ interface ProductivitySummary {
   daily: DailyProductivityRow[];
 }
 
-const fallbackSummary: ProductivitySummary = {
-  producedKg: 52153,
-  averageYield: 0.987,
-  workedDays: 5,
-  averageKgPerDay: 10430.6,
-  records: 12,
-  daily: [
-    { date: "2026-05-11", producedKg: 10820, averageYield: 1.006 },
-    { date: "2026-05-12", producedKg: 10110, averageYield: 0.989 },
-    { date: "2026-05-13", producedKg: 10704, averageYield: 0.981 }
-  ]
-};
+const fallbackSummary = legacyProductivitySummary as ProductivitySummary;
 
 export default function ProductivityPage() {
-  const [weeks, setWeeks] = useState<WeekRow[]>([]);
-  const [weekId, setWeekId] = useState("");
+  const [weeks, setWeeks] = useState<WeekRow[]>(legacyWeeks);
+  const [weekId, setWeekId] = useState(preferredLegacyWeekId());
   const [summary, setSummary] = useState<ProductivitySummary>(fallbackSummary);
-  const [message, setMessage] = useState("Aguardando login para carregar produtividade real.");
+  const [message, setMessage] = useState(`${fallbackSummary.records} lancamento(s) de produtividade carregado(s) da planilha local.`);
   const [loading, setLoading] = useState(false);
   const token = useMemo(() => getSession()?.accessToken, []);
 
@@ -64,7 +54,9 @@ export default function ProductivityPage() {
       setSummary(data.records ? data : fallbackSummary);
       setMessage(data.records ? "Produtividade carregada da API." : "Sem producao na semana selecionada; exibindo amostra operacional.");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Produtividade demonstrativa em uso.");
+      setWeeks(legacyWeeks);
+      setSummary(fallbackSummary);
+      setMessage(error instanceof Error ? `${error.message} Produtividade da planilha local em uso.` : "Produtividade da planilha local em uso.");
     } finally {
       setLoading(false);
     }

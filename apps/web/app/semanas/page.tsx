@@ -7,6 +7,7 @@ import { DataTable } from "@/components/tables/data-table";
 import { Button } from "@/components/ui/button";
 import { Card, StatCard } from "@/components/ui/card";
 import { apiGetClient, apiPatchClient, apiPostClient, getSession } from "@/services/api";
+import { legacyWeeks } from "@/lib/legacy-data";
 
 interface WeekRow {
   id: string;
@@ -19,10 +20,7 @@ interface WeekRow {
   status: "OPEN" | "REVIEW" | "CLOSED" | "ARCHIVED";
 }
 
-const fallbackWeeks: WeekRow[] = [
-  { id: "legacy-week-1", year: 2026, month: 5, weekNumber: 1, label: "Semana 1", startsOn: "2026-05-04", endsOn: "2026-05-08", status: "CLOSED" },
-  { id: "legacy-week-2", year: 2026, month: 5, weekNumber: 2, label: "Semana 2", startsOn: "2026-05-11", endsOn: "2026-05-15", status: "OPEN" }
-];
+const fallbackWeeks = legacyWeeks as WeekRow[];
 
 function toIsoDate(date: Date) {
   return date.toISOString().slice(0, 10);
@@ -46,7 +44,7 @@ function currentWeekPayload() {
 
 export default function WeeksPage() {
   const [weeks, setWeeks] = useState<WeekRow[]>(fallbackWeeks);
-  const [message, setMessage] = useState("Aguardando login para carregar semanas reais.");
+  const [message, setMessage] = useState(`${fallbackWeeks.length} semana(s) carregada(s) da planilha local.`);
   const [loading, setLoading] = useState(false);
   const token = useMemo(() => getSession()?.accessToken, []);
 
@@ -58,7 +56,8 @@ export default function WeeksPage() {
       setWeeks(data);
       setMessage(`${data.length} semana(s) carregada(s) da API.`);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Semanas demonstrativas em uso.");
+      setWeeks(fallbackWeeks);
+      setMessage(error instanceof Error ? `${error.message} Semanas da planilha local em uso.` : "Semanas da planilha local em uso.");
     } finally {
       setLoading(false);
     }

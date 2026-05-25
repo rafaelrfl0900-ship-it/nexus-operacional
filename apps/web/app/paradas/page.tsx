@@ -6,6 +6,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { DataTable } from "@/components/tables/data-table";
 import { Button } from "@/components/ui/button";
 import { Card, StatCard } from "@/components/ui/card";
+import { legacyDowntimeEntries, legacyDowntimeReasons, legacyWeeks, preferredLegacyWeekId } from "@/lib/legacy-data";
 import { apiGetClient, apiPostClient, getSession } from "@/services/api";
 
 interface WeekRow {
@@ -29,21 +30,18 @@ interface DowntimeEntryRow {
   reason?: { name: string };
 }
 
-const fallbackRows = [
-  { Data: "2026-05-14", Setor: "P1", Motivo: "Aguardando massa", Tempo: "12 min", Status: "OK" },
-  { Data: "2026-05-14", Setor: "P1", Motivo: "Troca de arame", Tempo: "31 min", Status: "MEDIUM" }
-];
-
 function at(date: string, time: string) {
   return `${date}T${time}:00`;
 }
 
 export default function DowntimePage() {
-  const [weeks, setWeeks] = useState<WeekRow[]>([]);
-  const [reasons, setReasons] = useState<ReasonRow[]>([]);
-  const [entries, setEntries] = useState<DowntimeEntryRow[]>([]);
-  const [weekId, setWeekId] = useState("");
-  const [reasonId, setReasonId] = useState("");
+  const fallbackWeekId = preferredLegacyWeekId();
+  const fallbackEntries = useMemo(() => legacyDowntimeEntries.filter((entry) => entry.weekId === fallbackWeekId), [fallbackWeekId]);
+  const [weeks, setWeeks] = useState<WeekRow[]>(legacyWeeks);
+  const [reasons, setReasons] = useState<ReasonRow[]>(legacyDowntimeReasons);
+  const [entries, setEntries] = useState<DowntimeEntryRow[]>(fallbackEntries);
+  const [weekId, setWeekId] = useState(fallbackWeekId);
+  const [reasonId, setReasonId] = useState(legacyDowntimeReasons[0]?.id ?? "");
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [sector, setSector] = useState<"P1" | "P2">("P1");
   const [productionStart, setProductionStart] = useState("08:00");
@@ -51,19 +49,23 @@ export default function DowntimePage() {
   const [downtimeStart, setDowntimeStart] = useState("10:00");
   const [downtimeEnd, setDowntimeEnd] = useState("10:20");
   const [producedMassKg, setProducedMassKg] = useState(5000);
-  const [message, setMessage] = useState("Aguardando login para carregar paradas reais.");
+  const [message, setMessage] = useState(`${fallbackEntries.length} parada(s) carregada(s) da planilha local.`);
   const [loading, setLoading] = useState(false);
   const token = useMemo(() => getSession()?.accessToken, []);
 
   async function loadData(nextWeekId = weekId) {
-    if (!token) return;
+    const requestedWeek = nextWeekId || weekId || fallbackWeekId;
+    if (!token) {
+      setEntries(legacyDowntimeEntries.filter((entry) => entry.weekId === requestedWeek));
+      return;
+    }
     setLoading(true);
     try {
       const [weekRows, reasonRows] = await Promise.all([
         apiGetClient<WeekRow[]>("/weeks", token),
         apiGetClient<ReasonRow[]>("/downtime/reasons", token)
       ]);
-      const selectedWeek = nextWeekId || weekRows.find((week) => week.status !== "CLOSED" && week.status !== "ARCHIVED")?.id || weekRows[0]?.id || "";
+      const selectedWeek = requestedWeek || weekRows.find((week) => week.status !== "CLOSED" && week.status !== "ARCHIVED")?.id || weekRows[0]?.id || "";
       setWeeks(weekRows);
       setReasons(reasonRows);
       setWeekId(selectedWeek);
@@ -74,7 +76,10 @@ export default function DowntimePage() {
       }
       setMessage("Paradas carregadas da API.");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Paradas demonstrativas em uso.");
+      setWeeks(legacyWeeks);
+      setReasons(legacyDowntimeReasons);
+      setEntries(legacyDowntimeEntries.filter((entry) => entry.weekId === requestedWeek));
+      setMessage(error instanceof Error ? `${error.message} Paradas da planilha local em uso.` : "Paradas da planilha local em uso.");
     } finally {
       setLoading(false);
     }
@@ -125,7 +130,13 @@ export default function DowntimePage() {
         Tempo: `${Number(entry.stoppedMinutes).toLocaleString("pt-BR")} min`,
         Status: entry.status
       }))
-    : fallbackRows;
+    : legacyDowntimeEntries.slice(0, 10).map((entry) => ({
+        Data: entry.date.slice(0, 10),
+        Setor: entry.sector?.code ?? "-",
+        Motivo: entry.reason?.name ?? "-",
+        Tempo: `${Number(entry.stoppedMinutes).toLocaleString("pt-BR")} min`,
+        Status: entry.status
+      }));
 
   return (
     <div className="space-y-6">

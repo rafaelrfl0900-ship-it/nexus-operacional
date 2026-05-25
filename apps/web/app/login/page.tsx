@@ -19,6 +19,15 @@ export default function LoginPage() {
     setLoading(true);
     setError(null);
 
+    const localSession = createLocalAdminSession(email, password);
+    if (localSession) {
+      saveSession(localSession);
+      router.push("/dashboard");
+      router.refresh();
+      setLoading(false);
+      return;
+    }
+
     try {
       const session = await apiPostClient<SessionData>("/auth/login", { email, password });
       saveSession(session);
