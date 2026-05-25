@@ -12,6 +12,33 @@ export interface SessionData {
   user: SessionUser;
 }
 
+const localAdminEmail = process.env.NEXT_PUBLIC_LOCAL_ADMIN_EMAIL ?? "admin@nexus.local";
+const localAdminPassword = process.env.NEXT_PUBLIC_LOCAL_ADMIN_PASSWORD ?? "ChangeMe!2026";
+const localAdminName = process.env.NEXT_PUBLIC_LOCAL_ADMIN_NAME ?? "Administrador Nexus";
+const localAdminDefaultEnabled = /^https?:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/.test(API_URL);
+const localAdminEnabled = (process.env.NEXT_PUBLIC_ENABLE_LOCAL_ADMIN ?? String(localAdminDefaultEnabled)) === "true";
+
+export function createLocalAdminSession(email: string, password: string): SessionData | null {
+  if (!localAdminEnabled) return null;
+  if (email.trim().toLowerCase() !== localAdminEmail.toLowerCase() || password !== localAdminPassword) return null;
+
+  return {
+    accessToken: "local-admin-session",
+    user: {
+      id: "local-admin",
+      email: localAdminEmail,
+      name: localAdminName,
+      roles: ["ADMIN"]
+    }
+  };
+}
+
+export function isNetworkAuthError(error: unknown) {
+  if (error instanceof TypeError) return true;
+  if (!(error instanceof Error)) return false;
+  return /failed to fetch|network|load failed|fetch/i.test(error.message);
+}
+
 export async function apiGet<T>(path: string, fallback: T): Promise<T> {
   try {
     const response = await fetch(`${API_URL}${path}`, { next: { revalidate: 30 } });

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Factory, LogOut, Search, UserCircle2 } from "lucide-react";
 import { navigation } from "@/lib/navigation";
@@ -10,6 +10,7 @@ import { clearSession, getSession, SessionUser } from "@/services/api";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
   const isLogin = pathname === "/login";
   const [user, setUser] = useState<SessionUser | null>(null);
 
@@ -20,7 +21,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   function logout() {
     clearSession();
     setUser(null);
-    window.location.href = "/login";
+    router.push("/login");
+    router.refresh();
   }
 
   if (isLogin) {
