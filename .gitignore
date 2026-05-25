@@ -15,5 +15,5 @@ build-output.txt
 __pycache__/
 scripts/__pycache__/
 .env
-backups/
+/backups/
 import-report.json
