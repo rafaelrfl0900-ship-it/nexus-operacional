@@ -1,0 +1,358 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import { RefreshCw, RotateCcw, Save } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Card, StatusBadge } from "@/components/ui/card";
+import { DataTable } from "@/components/tables/data-table";
+import { formatKg, formatPercent } from "@/lib/format";
+import { apiGetClient, apiPostClient, getSession } from "@/services/api";
+
+interface FormState {
+  productionOrder: string;
+  plannedBatches: number;
+  realizedBatches: number;
+  packedBoxes: number;
+  averagePackageWeightG: number;
+}
+
+interface ProductRow {
+  id: string;
+  code: string;
+  name: string;
+  active: boolean;
+  defaultSector?: { code: "P1" | "P2" };
+  weightConfig?: {
+    formula: "BOX_WEIGHT" | "PACKAGE_WEIGHT";
+    packageWeightKg: string | number;
+    boxWeightKg: string | number;
+    packagesPerBox: number;
+    massWeightKg: string | number;
+    targetPackageWeightG: string | number;
+    overweightTolerancePercent: string | number;
+  } | null;
+}
+
+interface WeekRow {
+  id: string;
+  label: string;
+  year: number;
+  month: number;
+  weekNumber: number;
+  status: string;
+}
+
+interface EntryRow {
+  id: string;
+  date: string;
+  productionOrder: string;
+  packedBoxes: string | number;
+  producedKg: string | number;
+  expectedYieldKg: string | number;
+  realYieldPercent: string | number;
+  overweightTotalKg: string | number;
+  status: string;
+  product?: { code: string; name: string };
+}
+
+interface PreviewState {
+  producedKg: number;
+  expectedYieldKg: number;
+  realYieldPercent: number;
+  overweightTotalKg: number;
+  overweightPercent: number;
+  status: string;
+}
+
+function today() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function defaultWeightConfig(sector: "P1" | "P2") {
+  return {
+    formula: "BOX_WEIGHT" as const,
+    packageWeightKg: sector === "P1" ? 1 : 2,
+    boxWeightKg: sector === "P1" ? 12 : 2,
+    packagesPerBox: sector === "P1" ? 12 : 1,
+    massWeightKg: sector === "P1" ? 511 : 0.582,
+    targetPackageWeightG: 1000,
+    overweightTolerancePercent: 0.02
+  };
+}
+
+function productWeightConfig(product: ProductRow | undefined, sector: "P1" | "P2") {
+  if (!product?.weightConfig) return defaultWeightConfig(sector);
+  return {
+    formula: product.weightConfig.formula,
+    packageWeightKg: Number(product.weightConfig.packageWeightKg),
+    boxWeightKg: Number(product.weightConfig.boxWeightKg),
+    packagesPerBox: Number(product.weightConfig.packagesPerBox),
+    massWeightKg: Number(product.weightConfig.massWeightKg),
+    targetPackageWeightG: Number(product.weightConfig.targetPackageWeightG),
+    overweightTolerancePercent: Number(product.weightConfig.overweightTolerancePercent)
+  };
+}
+
+export function ProductionForm({ sector }: { sector: "P1" | "P2" }) {
+  const [state, setState] = useState<FormState>({
+    productionOrder: "23329",
+    plannedBatches: sector === "P1" ? 31 : 100,
+    realizedBatches: sector === "P1" ? 31 : 101,
+    packedBoxes: sector === "P1" ? 1318 : 50,
+    averagePackageWeightG: sector === "P1" ? 1009 : 1000
+  });
+  const [date, setDate] = useState(today());
+  const [products, setProducts] = useState<ProductRow[]>([]);
+  const [weeks, setWeeks] = useState<WeekRow[]>([]);
+  const [productId, setProductId] = useState("");
+  const [weekId, setWeekId] = useState("");
+  const [entries, setEntries] = useState<EntryRow[]>([]);
+  const [serverPreview, setServerPreview] = useState<PreviewState | null>(null);
+  const [message, setMessage] = useState("Entre no sistema para carregar produtos, semanas e salvar lancamentos reais.");
+  const [loading, setLoading] = useState(false);
+  const token = useMemo(() => getSession()?.accessToken, []);
+
+  const selectedProduct = products.find((product) => product.id === productId);
+  const weightConfig = productWeightConfig(selectedProduct, sector);
+
+  const localPreview = useMemo((): PreviewState => {
+    const producedKg =
+      weightConfig.formula === "PACKAGE_WEIGHT"
+        ? state.packedBoxes * weightConfig.packagesPerBox * weightConfig.packageWeightKg
+        : state.packedBoxes * weightConfig.boxWeightKg;
+    const expectedKg = state.realizedBatches * weightConfig.massWeightKg;
+    const yieldPercent = expectedKg === 0 ? 0 : producedKg / expectedKg;
+    const overweightG = Math.max(state.averagePackageWeightG - weightConfig.targetPackageWeightG, 0);
+    const overweightKg = (overweightG * state.packedBoxes * weightConfig.packagesPerBox) / 1000;
+    return {
+      producedKg,
+      expectedYieldKg: expectedKg,
+      realYieldPercent: yieldPercent,
+      overweightTotalKg: overweightKg,
+      overweightPercent: producedKg === 0 ? 0 : overweightKg / producedKg,
+      status: overweightKg / Math.max(producedKg, 1) > weightConfig.overweightTolerancePercent ? "ATTENTION" : "OK"
+    };
+  }, [state, weightConfig]);
+
+  const preview = serverPreview ?? localPreview;
+
+  async function loadReferences() {
+    if (!token) return;
+    setLoading(true);
+    try {
+      const [productRows, weekRows] = await Promise.all([
+        apiGetClient<ProductRow[]>("/products?active=true", token),
+        apiGetClient<WeekRow[]>("/weeks", token)
+      ]);
+      const sectorProducts = productRows.filter((product) => product.defaultSector?.code === sector || !product.defaultSector);
+      setProducts(sectorProducts);
+      setWeeks(weekRows);
+      setProductId((current) => current || sectorProducts[0]?.id || "");
+      setWeekId((current) => current || weekRows.find((week) => week.status !== "CLOSED" && week.status !== "ARCHIVED")?.id || weekRows[0]?.id || "");
+      setMessage("Produtos e semanas carregados da API.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Nao foi possivel carregar referencias reais.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function loadEntries(nextWeekId = weekId) {
+    if (!token || !nextWeekId) return;
+    try {
+      const query = new URLSearchParams({ sector, weekId: nextWeekId });
+      const data = await apiGetClient<EntryRow[]>(`/production?${query.toString()}`, token);
+      setEntries(data);
+    } catch {
+      setEntries([]);
+    }
+  }
+
+  useEffect(() => {
+    loadReferences();
+  }, []);
+
+  useEffect(() => {
+    loadEntries(weekId);
+  }, [weekId]);
+
+  function update<K extends keyof FormState>(key: K, value: FormState[K]) {
+    setState((current) => ({ ...current, [key]: value }));
+    setServerPreview(null);
+  }
+
+  async function validateWithBackend() {
+    setLoading(true);
+    try {
+      const response = await apiPostClient<PreviewState>("/production/preview", {
+        sector,
+        plannedBatches: state.plannedBatches,
+        realizedBatches: state.realizedBatches,
+        usedReworkKg: 0,
+        packedBoxes: state.packedBoxes,
+        weighingLossKg: 0,
+        generatedReworkKg: 0,
+        averagePackageWeightG: state.averagePackageWeightG,
+        weightConfig
+      });
+      setServerPreview(response);
+      setMessage("Calculo validado pela API de dominio.");
+    } catch (caught) {
+      setServerPreview(null);
+      setMessage(caught instanceof Error ? caught.message : "API indisponivel; previa local preservada.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function saveEntry() {
+    if (!token) {
+      setMessage("Entre no sistema para salvar lancamentos reais.");
+      return;
+    }
+    if (!weekId || !productId) {
+      setMessage("Selecione uma semana e um produto carregados do banco.");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await apiPostClient(
+        "/production",
+        {
+          weekId,
+          sector,
+          date,
+          productId,
+          productionOrder: state.productionOrder,
+          plannedBatches: state.plannedBatches,
+          realizedBatches: state.realizedBatches,
+          usedReworkKg: 0,
+          packedBoxes: state.packedBoxes,
+          weighingLossKg: 0,
+          generatedReworkKg: 0,
+          averagePackageWeightG: state.averagePackageWeightG,
+          notes: "Lancamento salvo via tela operacional."
+        },
+        token
+      );
+      setMessage("Lancamento salvo no banco e recalculado pelo backend.");
+      await loadEntries(weekId);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Falha ao salvar lancamento.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-4 xl:grid-cols-[1fr_360px]">
+        <Card>
+          <div className="mb-5 flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-semibold">Lancamento diario {sector}</h2>
+              <p className="text-sm text-slate-400">Produto, semana e gravacao usam a API autenticada quando disponivel.</p>
+            </div>
+            <StatusBadge status={preview.status} />
+          </div>
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            <SelectField label="Semana" value={weekId} onChange={setWeekId} options={weeks.map((week) => ({ value: week.id, label: `${week.label} - ${week.status}` }))} />
+            <SelectField label="Produto" value={productId} onChange={setProductId} options={products.map((product) => ({ value: product.id, label: `${product.code} - ${product.name}` }))} />
+            <Field label="Data" type="date" value={date} onChange={setDate} />
+            <Field label="OP" value={state.productionOrder} onChange={(value) => update("productionOrder", value)} />
+            <NumberField label="Planejado bat." value={state.plannedBatches} onChange={(value) => update("plannedBatches", value)} />
+            <NumberField label="Realizado bat." value={state.realizedBatches} onChange={(value) => update("realizedBatches", value)} />
+            <NumberField label="Caixas embaladas" value={state.packedBoxes} onChange={(value) => update("packedBoxes", value)} />
+            <NumberField label="Peso medio pacote g" value={state.averagePackageWeightG} onChange={(value) => update("averagePackageWeightG", value)} />
+          </div>
+          <div className="mt-6 flex flex-wrap gap-3">
+            <Button type="button" onClick={saveEntry} disabled={loading}>
+              <Save className="size-4" />
+              {loading ? "Processando..." : "Salvar lancamento"}
+            </Button>
+            <Button type="button" className="border-slate-400/30 bg-white/5" onClick={validateWithBackend} disabled={loading}>
+              <RefreshCw className="size-4" />
+              Validar calculo
+            </Button>
+            <Button type="button" className="border-slate-400/30 bg-white/5" onClick={() => setServerPreview(null)}>
+              <RotateCcw className="size-4" />
+              Limpar previa
+            </Button>
+          </div>
+          <p className="mt-4 rounded-md border border-[var(--line)] bg-white/5 px-3 py-2 text-sm text-slate-300">{message}</p>
+        </Card>
+
+        <Card>
+          <h2 className="mb-4 font-semibold">Previa tecnica</h2>
+          <Metric label="Total produzido" value={formatKg(preview.producedKg)} />
+          <Metric label="Rendimento esperado" value={formatKg(preview.expectedYieldKg)} />
+          <Metric label="Rendimento real" value={formatPercent(preview.realYieldPercent)} />
+          <Metric label="Sobrepeso total" value={formatKg(preview.overweightTotalKg)} />
+          <Metric label="Sobrepeso %" value={formatPercent(preview.overweightPercent)} />
+        </Card>
+      </div>
+
+      <DataTable
+        title={`Lancamentos ${sector}`}
+        rows={
+          entries.length
+            ? entries.map((entry) => ({
+                Data: entry.date.slice(0, 10),
+                Produto: entry.product ? `${entry.product.code} - ${entry.product.name}` : "-",
+                OP: entry.productionOrder,
+                Caixas: Number(entry.packedBoxes).toLocaleString("pt-BR"),
+                Produzido: formatKg(Number(entry.producedKg)),
+                Rendimento: formatPercent(Number(entry.realYieldPercent)),
+                Sobrepeso: formatKg(Number(entry.overweightTotalKg)),
+                Status: entry.status
+              }))
+            : [{ Data: "-", Produto: "Nenhum lancamento carregado para a semana selecionada.", OP: "-", Caixas: "-", Produzido: "-", Rendimento: "-", Sobrepeso: "-", Status: "-" }]
+        }
+      />
+    </div>
+  );
+}
+
+function Field({ label, value, onChange, type = "text" }: { label: string; value: string; onChange: (value: string) => void; type?: string }) {
+  return (
+    <label className="space-y-2">
+      <span className="text-xs uppercase text-slate-400">{label}</span>
+      <input type={type} className="w-full rounded-md border border-[var(--line)] bg-white/5 px-3 py-2 text-sm outline-none focus:border-cyan-300/60" value={value} onChange={(event) => onChange(event.target.value)} />
+    </label>
+  );
+}
+
+function SelectField({ label, value, onChange, options }: { label: string; value: string; onChange: (value: string) => void; options: Array<{ value: string; label: string }> }) {
+  return (
+    <label className="space-y-2">
+      <span className="text-xs uppercase text-slate-400">{label}</span>
+      <select className="w-full rounded-md border border-[var(--line)] bg-[#07101d] px-3 py-2 text-sm outline-none focus:border-cyan-300/60" value={value} onChange={(event) => onChange(event.target.value)}>
+        <option value="">Selecione</option>
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function NumberField({ label, value, onChange }: { label: string; value: number; onChange: (value: number) => void }) {
+  return (
+    <label className="space-y-2">
+      <span className="text-xs uppercase text-slate-400">{label}</span>
+      <input type="number" className="w-full rounded-md border border-[var(--line)] bg-white/5 px-3 py-2 text-sm outline-none focus:border-cyan-300/60" value={value} onChange={(event) => onChange(Number(event.target.value))} />
+    </label>
+  );
+}
+
+function Metric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="border-b border-[var(--line)] py-3 last:border-0">
+      <p className="text-xs uppercase text-slate-400">{label}</p>
+      <strong className="mt-1 block text-xl">{value}</strong>
+    </div>
+  );
+}

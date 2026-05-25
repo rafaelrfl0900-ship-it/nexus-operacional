@@ -1,0 +1,531 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum SectorCode {
+  P1
+  P2
+}
+
+enum WeekStatus {
+  OPEN
+  REVIEW
+  CLOSED
+  ARCHIVED
+}
+
+enum RoleCode {
+  ADMIN
+  MANAGER
+  SUPERVISOR
+  OPERATOR
+  VIEWER
+}
+
+enum LossTypeCode {
+  PACKAGING
+  BOX
+  ORGANIC
+  MACHINE
+  WEIGHING
+  OVERWEIGHT
+  OTHER
+}
+
+enum AlertStatus {
+  OK
+  MEDIUM
+  ATTENTION
+  CRITICAL
+}
+
+enum ProductionFormula {
+  BOX_WEIGHT
+  PACKAGE_WEIGHT
+}
+
+enum ExportStatus {
+  QUEUED
+  GENERATED
+  FAILED
+}
+
+enum ImportStatus {
+  RECEIVED
+  CLEANED
+  IMPORTED
+  IMPORTED_WITH_ERRORS
+  FAILED
+}
+
+model User {
+  id           String     @id @default(uuid()) @db.Uuid
+  email        String     @unique
+  name         String
+  passwordHash String     @map("password_hash")
+  active       Boolean    @default(true)
+  lastLoginAt  DateTime?  @map("last_login_at")
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updatedAt    DateTime   @updatedAt @map("updated_at")
+  deletedAt    DateTime?  @map("deleted_at")
+  roles        UserRole[]
+  auditLogs    AuditLog[]
+
+  @@map("users")
+}
+
+model Role {
+  id          String           @id @default(uuid()) @db.Uuid
+  code        RoleCode         @unique
+  name        String
+  description String?
+  createdAt   DateTime         @default(now()) @map("created_at")
+  updatedAt   DateTime         @updatedAt @map("updated_at")
+  users       UserRole[]
+  permissions RolePermission[]
+
+  @@map("roles")
+}
+
+model Permission {
+  id          String           @id @default(uuid()) @db.Uuid
+  code        String           @unique
+  description String?
+  createdAt   DateTime         @default(now()) @map("created_at")
+  updatedAt   DateTime         @updatedAt @map("updated_at")
+  roles       RolePermission[]
+
+  @@map("permissions")
+}
+
+model UserRole {
+  userId String @map("user_id") @db.Uuid
+  roleId String @map("role_id") @db.Uuid
+  user   User   @relation(fields: [userId], references: [id])
+  role   Role   @relation(fields: [roleId], references: [id])
+
+  @@id([userId, roleId])
+  @@map("user_roles")
+}
+
+model RolePermission {
+  roleId       String     @map("role_id") @db.Uuid
+  permissionId String     @map("permission_id") @db.Uuid
+  role         Role       @relation(fields: [roleId], references: [id])
+  permission   Permission @relation(fields: [permissionId], references: [id])
+
+  @@id([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+model Sector {
+  id          String            @id @default(uuid()) @db.Uuid
+  code        SectorCode        @unique
+  name        String
+  description String?
+  createdAt   DateTime          @default(now()) @map("created_at")
+  updatedAt   DateTime          @updatedAt @map("updated_at")
+  lines       ProductionLine[]
+  products    Product[]
+  entries     ProductionEntry[]
+  losses      LossEntry[]
+  downtimes   DowntimeEntry[]
+
+  @@map("sectors")
+}
+
+model ProductionLine {
+  id          String            @id @default(uuid()) @db.Uuid
+  sectorId    String            @map("sector_id") @db.Uuid
+  code        String
+  name        String
+  active      Boolean           @default(true)
+  createdAt   DateTime          @default(now()) @map("created_at")
+  updatedAt   DateTime          @updatedAt @map("updated_at")
+  deletedAt   DateTime?         @map("deleted_at")
+  sector      Sector            @relation(fields: [sectorId], references: [id])
+  entries     ProductionEntry[]
+  downtimes   DowntimeEntry[]
+
+  @@unique([sectorId, code])
+  @@map("production_lines")
+}
+
+model Product {
+  id            String               @id @default(uuid()) @db.Uuid
+  code          String               @unique
+  name          String
+  defaultSectorId String             @map("default_sector_id") @db.Uuid
+  unit          String               @default("kg")
+  active        Boolean              @default(true)
+  notes         String?
+  createdAt     DateTime             @default(now()) @map("created_at")
+  updatedAt     DateTime             @updatedAt @map("updated_at")
+  deletedAt     DateTime?            @map("deleted_at")
+  createdBy     String?              @map("created_by") @db.Uuid
+  updatedBy     String?              @map("updated_by") @db.Uuid
+  defaultSector Sector               @relation(fields: [defaultSectorId], references: [id])
+  weightConfig  ProductWeightConfig?
+  orders        ProductionOrder[]
+  entries       ProductionEntry[]
+  losses        LossEntry[]
+
+  @@index([defaultSectorId])
+  @@map("products")
+}
+
+model ProductWeightConfig {
+  id                         String            @id @default(uuid()) @db.Uuid
+  productId                  String            @unique @map("product_id") @db.Uuid
+  packageWeightKg            Decimal           @map("package_weight_kg") @db.Decimal(12, 3)
+  boxWeightKg                Decimal           @map("box_weight_kg") @db.Decimal(12, 3)
+  packagesPerBox             Int               @map("packages_per_box")
+  massWeightKg               Decimal           @map("mass_weight_kg") @db.Decimal(12, 3)
+  targetPackageWeightG       Decimal           @map("target_package_weight_g") @db.Decimal(12, 3)
+  overweightTolerancePercent Decimal           @default(0.02) @map("overweight_tolerance_percent") @db.Decimal(8, 6)
+  formula                    ProductionFormula @default(BOX_WEIGHT)
+  createdAt                  DateTime          @default(now()) @map("created_at")
+  updatedAt                  DateTime          @updatedAt @map("updated_at")
+  product                    Product           @relation(fields: [productId], references: [id])
+
+  @@map("product_weight_configs")
+}
+
+model WeeklyPeriod {
+  id          String            @id @default(uuid()) @db.Uuid
+  year        Int
+  month       Int
+  weekNumber  Int               @map("week_number")
+  label       String
+  startsOn    DateTime          @map("starts_on") @db.Date
+  endsOn      DateTime          @map("ends_on") @db.Date
+  status      WeekStatus        @default(OPEN)
+  closedAt    DateTime?         @map("closed_at")
+  archivedAt  DateTime?         @map("archived_at")
+  createdAt   DateTime          @default(now()) @map("created_at")
+  updatedAt   DateTime          @updatedAt @map("updated_at")
+  deletedAt   DateTime?         @map("deleted_at")
+  entries     ProductionEntry[]
+  orders      ProductionOrder[]
+  losses      LossEntry[]
+  downtimes   DowntimeEntry[]
+  snapshots   DashboardSnapshot[]
+
+  @@unique([year, month, weekNumber])
+  @@index([status])
+  @@map("weekly_periods")
+}
+
+model ProductionOrder {
+  id              String            @id @default(uuid()) @db.Uuid
+  weekId          String            @map("week_id") @db.Uuid
+  productId       String            @map("product_id") @db.Uuid
+  sectorCode      SectorCode        @map("sector_code")
+  orderNumber     String            @map("order_number")
+  status          String            @default("OPEN")
+  createdAt       DateTime          @default(now()) @map("created_at")
+  updatedAt       DateTime          @updatedAt @map("updated_at")
+  deletedAt       DateTime?         @map("deleted_at")
+  week            WeeklyPeriod      @relation(fields: [weekId], references: [id])
+  product         Product           @relation(fields: [productId], references: [id])
+  entries         ProductionEntry[]
+
+  @@unique([weekId, orderNumber, productId])
+  @@map("production_orders")
+}
+
+model ProductionEntry {
+  id                      String            @id @default(uuid()) @db.Uuid
+  weekId                  String            @map("week_id") @db.Uuid
+  sectorId                String            @map("sector_id") @db.Uuid
+  lineId                  String?           @map("line_id") @db.Uuid
+  productId               String            @map("product_id") @db.Uuid
+  productionOrderId       String?           @map("production_order_id") @db.Uuid
+  date                    DateTime          @db.Date
+  productionOrder         String            @map("production_order")
+  plannedBatches          Decimal           @map("planned_batches") @db.Decimal(12, 3)
+  realizedBatches         Decimal           @map("realized_batches") @db.Decimal(12, 3)
+  usedReworkKg            Decimal           @default(0) @map("used_rework_kg") @db.Decimal(12, 3)
+  packedBoxes             Decimal           @map("packed_boxes") @db.Decimal(12, 3)
+  producedKg              Decimal           @map("produced_kg") @db.Decimal(14, 3)
+  weighingLossKg          Decimal           @default(0) @map("weighing_loss_kg") @db.Decimal(12, 3)
+  generatedReworkKg       Decimal           @default(0) @map("generated_rework_kg") @db.Decimal(12, 3)
+  expectedYieldKg         Decimal           @map("expected_yield_kg") @db.Decimal(14, 3)
+  realYieldPercent        Decimal           @map("real_yield_percent") @db.Decimal(10, 6)
+  massWeightKg            Decimal           @map("mass_weight_kg") @db.Decimal(12, 3)
+  boxWeightKg             Decimal           @map("box_weight_kg") @db.Decimal(12, 3)
+  targetPackageWeightG    Decimal           @map("target_package_weight_g") @db.Decimal(12, 3)
+  averagePackageWeightG   Decimal?          @map("average_package_weight_g") @db.Decimal(12, 3)
+  overweightGPerPackage   Decimal           @map("overweight_g_per_package") @db.Decimal(12, 3)
+  overweightTotalKg       Decimal           @map("overweight_total_kg") @db.Decimal(14, 3)
+  overweightPercent       Decimal           @map("overweight_percent") @db.Decimal(10, 6)
+  status                  AlertStatus       @default(OK)
+  notes                   String?
+  createdAt               DateTime          @default(now()) @map("created_at")
+  updatedAt               DateTime          @updatedAt @map("updated_at")
+  deletedAt               DateTime?         @map("deleted_at")
+  createdBy               String?           @map("created_by") @db.Uuid
+  updatedBy               String?           @map("updated_by") @db.Uuid
+  week                    WeeklyPeriod      @relation(fields: [weekId], references: [id])
+  sector                  Sector            @relation(fields: [sectorId], references: [id])
+  line                    ProductionLine?   @relation(fields: [lineId], references: [id])
+  product                 Product           @relation(fields: [productId], references: [id])
+  order                   ProductionOrder?  @relation(fields: [productionOrderId], references: [id])
+
+  @@index([weekId, sectorId, date])
+  @@index([productId])
+  @@index([productionOrder])
+  @@map("production_entries")
+}
+
+model LossType {
+  id          String       @id @default(uuid()) @db.Uuid
+  code        LossTypeCode @unique
+  name        String
+  defaultGoalKg Decimal?   @map("default_goal_kg") @db.Decimal(12, 3)
+  active      Boolean      @default(true)
+  createdAt   DateTime     @default(now()) @map("created_at")
+  updatedAt   DateTime     @updatedAt @map("updated_at")
+  entries     LossEntry[]
+
+  @@map("loss_types")
+}
+
+model LossEntry {
+  id                String       @id @default(uuid()) @db.Uuid
+  weekId            String       @map("week_id") @db.Uuid
+  date              DateTime     @db.Date
+  sectorId          String?      @map("sector_id") @db.Uuid
+  productId         String?      @map("product_id") @db.Uuid
+  productionOrderId String?      @map("production_order_id") @db.Uuid
+  lossTypeId        String       @map("loss_type_id") @db.Uuid
+  quantityKg        Decimal      @map("quantity_kg") @db.Decimal(12, 3)
+  reason            String?
+  notes             String?
+  createdAt         DateTime     @default(now()) @map("created_at")
+  updatedAt         DateTime     @updatedAt @map("updated_at")
+  deletedAt         DateTime?    @map("deleted_at")
+  createdBy         String?      @map("created_by") @db.Uuid
+  updatedBy         String?      @map("updated_by") @db.Uuid
+  week              WeeklyPeriod @relation(fields: [weekId], references: [id])
+  sector            Sector?      @relation(fields: [sectorId], references: [id])
+  product           Product?     @relation(fields: [productId], references: [id])
+  lossType          LossType     @relation(fields: [lossTypeId], references: [id])
+
+  @@index([weekId, date])
+  @@index([lossTypeId])
+  @@map("loss_entries")
+}
+
+model DowntimeReason {
+  id          String           @id @default(uuid()) @db.Uuid
+  name        String           @unique
+  active      Boolean          @default(true)
+  createdAt   DateTime         @default(now()) @map("created_at")
+  updatedAt   DateTime         @updatedAt @map("updated_at")
+  entries     DowntimeEntry[]
+
+  @@map("downtime_reasons")
+}
+
+model DowntimeEntry {
+  id                String          @id @default(uuid()) @db.Uuid
+  weekId            String          @map("week_id") @db.Uuid
+  date              DateTime        @db.Date
+  sectorId          String          @map("sector_id") @db.Uuid
+  lineId            String?         @map("line_id") @db.Uuid
+  productionStart   DateTime        @map("production_start")
+  productionEnd     DateTime        @map("production_end")
+  producedMassKg    Decimal         @map("produced_mass_kg") @db.Decimal(14, 3)
+  downtimeStart     DateTime        @map("downtime_start")
+  downtimeEnd       DateTime        @map("downtime_end")
+  stoppedMinutes    Decimal         @map("stopped_minutes") @db.Decimal(12, 2)
+  stoppedPercent    Decimal         @map("stopped_percent") @db.Decimal(10, 6)
+  realKgHour        Decimal         @map("real_kg_hour") @db.Decimal(14, 3)
+  possibleKgHour    Decimal         @map("possible_kg_hour") @db.Decimal(14, 3)
+  status            AlertStatus     @default(OK)
+  downtimeReasonId  String          @map("downtime_reason_id") @db.Uuid
+  notes             String?
+  createdAt         DateTime        @default(now()) @map("created_at")
+  updatedAt         DateTime        @updatedAt @map("updated_at")
+  deletedAt         DateTime?       @map("deleted_at")
+  createdBy         String?         @map("created_by") @db.Uuid
+  updatedBy         String?         @map("updated_by") @db.Uuid
+  week              WeeklyPeriod    @relation(fields: [weekId], references: [id])
+  sector            Sector          @relation(fields: [sectorId], references: [id])
+  line              ProductionLine? @relation(fields: [lineId], references: [id])
+  reason            DowntimeReason  @relation(fields: [downtimeReasonId], references: [id])
+
+  @@index([weekId, date])
+  @@index([downtimeReasonId])
+  @@map("downtime_entries")
+}
+
+model ProductivityEntry {
+  id              String      @id @default(uuid()) @db.Uuid
+  weekId          String      @map("week_id") @db.Uuid
+  sectorCode      SectorCode  @map("sector_code")
+  date            DateTime    @db.Date
+  producedKg      Decimal     @map("produced_kg") @db.Decimal(14, 3)
+  productiveHours Decimal     @map("productive_hours") @db.Decimal(12, 3)
+  kgPerHour       Decimal     @map("kg_per_hour") @db.Decimal(14, 3)
+  createdAt       DateTime    @default(now()) @map("created_at")
+  updatedAt       DateTime    @updatedAt @map("updated_at")
+
+  @@index([weekId, sectorCode])
+  @@map("productivity_entries")
+}
+
+model Goal {
+  id          String      @id @default(uuid()) @db.Uuid
+  name        String
+  metric      String
+  sectorCode  SectorCode? @map("sector_code")
+  targetValue Decimal     @map("target_value") @db.Decimal(14, 6)
+  comparator  String      @default("<=")
+  active      Boolean     @default(true)
+  createdAt   DateTime    @default(now()) @map("created_at")
+  updatedAt   DateTime    @updatedAt @map("updated_at")
+  deletedAt   DateTime?   @map("deleted_at")
+
+  @@index([metric, active])
+  @@map("goals")
+}
+
+model DashboardSnapshot {
+  id        String       @id @default(uuid()) @db.Uuid
+  weekId    String?      @map("week_id") @db.Uuid
+  filter    Json
+  payload   Json
+  createdAt DateTime     @default(now()) @map("created_at")
+  week      WeeklyPeriod? @relation(fields: [weekId], references: [id])
+
+  @@map("dashboard_snapshots")
+}
+
+model ReportExport {
+  id        String       @id @default(uuid()) @db.Uuid
+  type      String
+  filters   Json
+  filePath  String?      @map("file_path")
+  status    ExportStatus @default(QUEUED)
+  createdAt DateTime     @default(now()) @map("created_at")
+  createdBy String?      @map("created_by") @db.Uuid
+
+  @@map("report_exports")
+}
+
+model PresentationExport {
+  id        String       @id @default(uuid()) @db.Uuid
+  type      String
+  filters   Json
+  payload   Json?
+  filePath  String?      @map("file_path")
+  status    ExportStatus @default(QUEUED)
+  createdAt DateTime     @default(now()) @map("created_at")
+  createdBy String?      @map("created_by") @db.Uuid
+
+  @@map("presentation_exports")
+}
+
+model AuditLog {
+  id          String   @id @default(uuid()) @db.Uuid
+  userId      String?  @map("user_id") @db.Uuid
+  module      String
+  action      String
+  entity      String
+  entityId    String?  @map("entity_id")
+  before      Json?
+  after       Json?
+  reason      String?
+  ipAddress   String?  @map("ip_address")
+  createdAt   DateTime @default(now()) @map("created_at")
+  user        User?    @relation(fields: [userId], references: [id])
+
+  @@index([module, action])
+  @@index([entity, entityId])
+  @@map("audit_logs")
+}
+
+model Attachment {
+  id        String   @id @default(uuid()) @db.Uuid
+  entity    String
+  entityId  String   @map("entity_id")
+  fileName  String   @map("file_name")
+  filePath  String   @map("file_path")
+  mimeType  String?  @map("mime_type")
+  createdAt DateTime @default(now()) @map("created_at")
+  createdBy String?  @map("created_by") @db.Uuid
+
+  @@index([entity, entityId])
+  @@map("attachments")
+}
+
+model Comment {
+  id        String   @id @default(uuid()) @db.Uuid
+  entity    String
+  entityId  String   @map("entity_id")
+  body      String
+  createdAt DateTime @default(now()) @map("created_at")
+  createdBy String?  @map("created_by") @db.Uuid
+  deletedAt DateTime? @map("deleted_at")
+
+  @@index([entity, entityId])
+  @@map("comments")
+}
+
+model SystemSetting {
+  id        String   @id @default(uuid()) @db.Uuid
+  key       String   @unique
+  value     Json
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("system_settings")
+}
+
+model ImportBatch {
+  id          String        @id @default(uuid()) @db.Uuid
+  sourceFile  String        @map("source_file")
+  status      ImportStatus  @default(RECEIVED)
+  summary     Json?
+  createdAt   DateTime      @default(now()) @map("created_at")
+  completedAt DateTime?     @map("completed_at")
+  createdBy   String?       @map("created_by") @db.Uuid
+  errors      ImportError[]
+
+  @@map("import_batches")
+}
+
+model ImportError {
+  id          String      @id @default(uuid()) @db.Uuid
+  batchId     String      @map("batch_id") @db.Uuid
+  sheetName   String?     @map("sheet_name")
+  cell        String?
+  rowNumber   Int?        @map("row_number")
+  field       String?
+  message     String
+  rawValue    String?     @map("raw_value")
+  createdAt   DateTime    @default(now()) @map("created_at")
+  batch       ImportBatch @relation(fields: [batchId], references: [id])
+
+  @@index([batchId])
+  @@map("import_errors")
+}
+
+model Backup {
+  id        String   @id @default(uuid()) @db.Uuid
+  filePath  String   @map("file_path")
+  status    String
+  sizeBytes BigInt?  @map("size_bytes")
+  checksum  String?
+  createdAt DateTime @default(now()) @map("created_at")
+  createdBy String?  @map("created_by") @db.Uuid
+
+  @@map("backups")
+}

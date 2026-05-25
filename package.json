@@ -1,0 +1,59 @@
+{
+  "name": "nexus-operacional",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "npm@11.12.1",
+  "description": "Centro de comando operacional para producao, perdas, sobrepeso, paradas, semanas, auditoria e reunioes.",
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "lint": "turbo lint",
+    "typecheck": "turbo typecheck",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "review:screenshots": "playwright test -c playwright.review.config.ts tests/e2e/review.spec.ts",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:deploy": "prisma migrate deploy",
+    "prisma:seed": "tsx prisma/seed.ts",
+    "import:excel": "python scripts/import_excel.py",
+    "clean:excel": "python scripts/clean_excel_data.py",
+    "migrate:legacy": "python scripts/migrate_legacy_data.py"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.7.0",
+    "zod": "^3.24.4"
+  },
+  "devDependencies": {
+    "@next/eslint-plugin-next": "^15.5.18",
+    "@playwright/test": "^1.52.0",
+    "@types/node": "^22.15.0",
+    "dotenv": "^16.4.7",
+    "eslint": "^9.25.1",
+    "eslint-config-next": "^15.5.18",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "prettier": "^3.5.3",
+    "prisma": "^6.7.0",
+    "tsx": "^4.19.4",
+    "turbo": "^2.5.2",
+    "typescript": "^5.8.3",
+    "typescript-eslint": "^8.59.4",
+    "vitest": "^3.1.2"
+  },
+  "engines": {
+    "node": ">=20.11"
+  },
+  "overrides": {
+    "postcss": "8.5.15",
+    "next": {
+      "postcss": "8.5.15"
+    },
+    "next@15.5.18": {
+      "postcss": "8.5.15"
+    }
+  }
+}
