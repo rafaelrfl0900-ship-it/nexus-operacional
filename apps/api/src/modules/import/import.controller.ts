@@ -1,6 +1,12 @@
-import { Body, Controller, Get, Post } from "@nestjs/common";
+import { Body, Controller, Get, Post, Query, UploadedFile, UseInterceptors } from "@nestjs/common";
+import { FileInterceptor } from "@nestjs/platform-express";
+import { Throttle } from "@nestjs/throttler";
+import { CurrentUser } from "../../infrastructure/security/current-user";
+import { CurrentUserData } from "../auth/current-user.decorator";
 import { Roles } from "../auth/roles.decorator";
-import { ImportService } from "./import.service";
+import { ImportService, UploadedWorkbookFile } from "./import.service";
+
+const importUploadLimitBytes = Number(process.env.IMPORT_MAX_UPLOAD_BYTES ?? 25 * 1024 * 1024);
 
 @Roles("ADMIN", "SUPERVISOR")
 @Controller("import")
@@ -8,17 +14,20 @@ export class ImportController {
   constructor(private readonly imports: ImportService) {}
 
   @Get("preview")
-  preview() {
-    return this.imports.preview();
+  preview(@Query("batchId") batchId?: string) {
+    return this.imports.preview(batchId);
   }
 
-  @Post("batches")
-  registerBatch(@Body() body: { sourceFile?: string }) {
-    return this.imports.registerBatch(body.sourceFile ?? process.env.LEGACY_EXCEL_PATH ?? "legacy.xlsx");
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @Post("upload")
+  @UseInterceptors(FileInterceptor("file", { limits: { fileSize: importUploadLimitBytes } }))
+  upload(@UploadedFile() file: UploadedWorkbookFile | undefined, @CurrentUserData() user?: CurrentUser) {
+    return this.imports.uploadWorkbook(file, user);
   }
 
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @Post("products")
-  importProducts(@Body() body: { sourceFile?: string }) {
-    return this.imports.importProducts(body.sourceFile);
+  importProducts(@Body() body: { batchId?: string }, @CurrentUserData() user?: CurrentUser) {
+    return this.imports.importProducts(body.batchId, user);
   }
 }

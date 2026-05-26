@@ -1,4 +1,4 @@
-export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3333/api";
+export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "/api";
 
 const sessionStorageKey = "nexus-session-user";
 const cookieSessionMarker = "cookie-session";
@@ -68,6 +68,22 @@ export async function apiPostClient<T>(path: string, payload: unknown, token?: s
   if (!response.ok) {
     if (response.status === 401) clearSession();
     throw new Error(await parseError(response, "Nao foi possivel concluir a operacao."));
+  }
+
+  return (await response.json()) as T;
+}
+
+export async function apiUploadClient<T>(path: string, formData: FormData, token?: string): Promise<T> {
+  const response = await fetch(`${API_URL}${path}`, {
+    method: "POST",
+    credentials: "include",
+    headers: authHeaders(token),
+    body: formData
+  });
+
+  if (!response.ok) {
+    if (response.status === 401) clearSession();
+    throw new Error(await parseError(response, "Nao foi possivel enviar o arquivo."));
   }
 
   return (await response.json()) as T;

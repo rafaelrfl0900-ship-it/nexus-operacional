@@ -1,4 +1,6 @@
 import { Controller, Get, Query } from "@nestjs/common";
+import { CurrentUser } from "../../infrastructure/security/current-user";
+import { CurrentUserData } from "../auth/current-user.decorator";
 import { Roles } from "../auth/roles.decorator";
 import { PresentationsService } from "./presentations.service";
 
@@ -8,7 +10,7 @@ export class PresentationsController {
   constructor(private readonly presentations: PresentationsService) {}
 
   @Get("executive")
-  executive(@Query("weekId") weekId?: string) {
-    return this.presentations.executiveDeck(weekId);
+  executive(@Query("weekId") weekId: string | undefined, @CurrentUserData() user?: CurrentUser) {
+    return this.presentations.executiveDeck(weekId, user);
   }
 }

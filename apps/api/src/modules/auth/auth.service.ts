@@ -77,7 +77,14 @@ export class AuthService {
     };
   }
 
-  private async recordAuthEvent(action: "login" | "login_failed", userId: string | undefined, after: unknown) {
+  async logout(currentUser: CurrentUser | undefined) {
+    if (!currentUser) {
+      throw new UnauthorizedException("Sessao ausente ou expirada.");
+    }
+    await this.recordAuthEvent("logout", currentUser.id, { email: currentUser.email, roles: currentUser.roles });
+  }
+
+  private async recordAuthEvent(action: "login" | "login_failed" | "logout", userId: string | undefined, after: unknown) {
     await this.prisma.auditLog.create({
       data: {
         userId,

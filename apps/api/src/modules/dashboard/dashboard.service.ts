@@ -1,6 +1,5 @@
 import { Injectable } from "@nestjs/common";
 import { PrismaService } from "../../infrastructure/database/prisma.service";
-import { legacyWorkbookInsights } from "../../domain/legacy-insights";
 
 function n(value: unknown): number {
   return Number(value ?? 0);
@@ -40,8 +39,7 @@ export class DashboardService {
       stoppedMinutes: n(downtime._sum.stoppedMinutes),
       stoppedPercent: n(downtime._avg.stoppedPercent),
       records: production._count,
-      weeksByStatus: weeks.map((item) => ({ status: item.status, count: item._count })),
-      legacyWorkbookInsights
+      weeksByStatus: weeks.map((item) => ({ status: item.status, count: item._count }))
     };
   }
 
@@ -99,10 +97,10 @@ export class DashboardService {
         timestamp: new Date().toISOString()
       };
     } catch (error) {
+      void error;
       return {
         status: "database-unreachable",
         database: "error",
-        message: error instanceof Error ? error.message : "Unknown database error",
         timestamp: new Date().toISOString()
       };
     }

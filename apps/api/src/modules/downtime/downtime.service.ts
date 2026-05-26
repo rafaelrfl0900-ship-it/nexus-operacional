@@ -1,8 +1,17 @@
-import { Injectable } from "@nestjs/common";
+import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "../../infrastructure/database/prisma.service";
 import { downtimeEntrySchema } from "../../domain/validators/schemas";
 import { calculateDowntime } from "../../domain/calculations/downtime-calculations";
 import { AuditService } from "../audit/audit.service";
+import { CurrentUser } from "../../infrastructure/security/current-user";
+
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function dateOnly(value: Date) {
+  const date = new Date(value);
+  date.setUTCHours(0, 0, 0, 0);
+  return date;
+}
 
 @Injectable()
 export class DowntimeService {
@@ -23,8 +32,15 @@ export class DowntimeService {
     return this.prisma.downtimeReason.findMany({ where: { active: true }, orderBy: { name: "asc" } });
   }
 
-  async create(payload: unknown) {
+  async create(payload: unknown, user?: CurrentUser) {
     const input = downtimeEntrySchema.parse(payload);
+    const week = await this.prisma.weeklyPeriod.findUnique({ where: { id: input.weekId } });
+    if (!week) throw new NotFoundException("Semana nao encontrada.");
+    if (week.status !== "OPEN" && week.status !== "REVIEW") {
+      throw new BadRequestException("Semana fechada ou arquivada nao aceita paradas.");
+    }
+    this.assertDateInsideWeek(input.date, week.startsOn, week.endsOn);
+    const userId = this.safeUserId(user);
     const sector = await this.prisma.sector.findUniqueOrThrow({ where: { code: input.sector } });
     const calculated = calculateDowntime({
       productionStart: input.productionStart,
@@ -50,11 +66,13 @@ export class DowntimeService {
         possibleKgHour: calculated.possibleKgHour,
         status: calculated.status,
         downtimeReasonId: input.downtimeReasonId,
-        notes: [input.notes, ...calculated.inconsistencies].filter(Boolean).join("\n")
+        notes: [input.notes, ...calculated.inconsistencies].filter(Boolean).join("\n"),
+        createdBy: userId,
+        updatedBy: userId
       },
       include: { sector: true, reason: true, week: true }
     });
-    await this.audit.record({ module: "downtime", action: "create", entity: "DowntimeEntry", entityId: entry.id, after: entry });
+    await this.audit.record({ userId, module: "downtime", action: "create", entity: "DowntimeEntry", entityId: entry.id, after: entry });
     return { ...entry, calculations: calculated };
   }
 
@@ -71,5 +89,16 @@ export class DowntimeService {
       stoppedMinutes: Number(row._sum.stoppedMinutes ?? 0),
       count: row._count
     }));
+  }
+
+  private assertDateInsideWeek(date: Date, startsOn: Date, endsOn: Date) {
+    const target = dateOnly(date);
+    if (target < dateOnly(startsOn) || target > dateOnly(endsOn)) {
+      throw new BadRequestException("Data da parada precisa pertencer ao periodo da semana selecionada.");
+    }
+  }
+
+  private safeUserId(user?: CurrentUser) {
+    return user?.id && uuidPattern.test(user.id) ? user.id : undefined;
   }
 }

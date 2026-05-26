@@ -30,7 +30,8 @@ describe("frontend security boundary", () => {
       "NEXT_PUBLIC_LOCAL_ADMIN_PASSWORD",
       "NEXT_PUBLIC_ENABLE_LOCAL_ADMIN",
       "window.localStorage",
-      "ChangeMe!2026"
+      "ChangeMe!2026",
+      "http://localhost:3333/api"
     ];
 
     const offenders = webFiles()

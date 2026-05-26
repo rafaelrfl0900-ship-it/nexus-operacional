@@ -1,12 +1,29 @@
-import { BadRequestException, Injectable, InternalServerErrorException } from "@nestjs/common";
 import { execFile } from "node:child_process";
+import { createHash, randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
-import { resolve } from "node:path";
+import { mkdir, writeFile } from "node:fs/promises";
+import { extname, resolve } from "node:path";
 import { promisify } from "node:util";
+import { BadRequestException, Injectable, InternalServerErrorException, NotFoundException } from "@nestjs/common";
+import { AuditService } from "../audit/audit.service";
 import { PrismaService } from "../../infrastructure/database/prisma.service";
-import { legacyWorkbookInsights } from "../../domain/legacy-insights";
+import { CurrentUser } from "../../infrastructure/security/current-user";
 
 const execFileAsync = promisify(execFile);
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const maxUploadBytes = Number(process.env.IMPORT_MAX_UPLOAD_BYTES ?? 25 * 1024 * 1024);
+const xlsxMimeTypes = new Set([
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/zip",
+  "application/octet-stream"
+]);
+
+export interface UploadedWorkbookFile {
+  originalname: string;
+  mimetype: string;
+  size: number;
+  buffer?: Buffer;
+}
 
 interface LegacyImportProduct {
   code: string;
@@ -35,6 +52,11 @@ interface LegacyImportError {
 
 interface LegacyImportReport {
   file: string;
+  sheetCount?: number;
+  formulaCount?: number;
+  tableCount?: number;
+  chartCount?: number;
+  errors?: Record<string, number>;
   legacyData?: {
     products?: LegacyImportProduct[];
     productCount?: number;
@@ -47,37 +69,120 @@ interface LegacyImportReport {
 
 @Injectable()
 export class ImportService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly audit: AuditService
+  ) {}
 
-  preview() {
+  async preview(batchId?: string) {
+    const batch = batchId
+      ? await this.prisma.importBatch.findUnique({
+          where: { id: batchId },
+          include: { errors: { take: 100, orderBy: { createdAt: "asc" } } }
+        })
+      : await this.prisma.importBatch.findFirst({
+          orderBy: { createdAt: "desc" },
+          include: { errors: { take: 100, orderBy: { createdAt: "asc" } } }
+        });
+
+    if (!batch) {
+      return {
+        source: "Nenhuma planilha carregada",
+        sheetCount: 0,
+        formulaCount: 0,
+        tableCount: 0,
+        chartCount: 0,
+        errors: {},
+        importErrors: [],
+        status: "NO_WORKBOOK"
+      };
+    }
+
+    const summary = typeof batch.summary === "object" && batch.summary ? batch.summary : {};
     return {
-      source: process.env.LEGACY_EXCEL_PATH ?? "Relatorios - MAIO 2026.xlsx",
-      ...legacyWorkbookInsights
+      source: batch.originalFileName ?? batch.sourceFile,
+      batchId: batch.id,
+      status: batch.status,
+      fileHash: batch.fileHash,
+      fileSizeBytes: batch.fileSizeBytes?.toString() ?? null,
+      ...summary,
+      importErrors: batch.errors
     };
   }
 
-  async registerBatch(sourceFile: string) {
-    return this.prisma.importBatch.create({
-      data: {
-        sourceFile,
-        status: "RECEIVED",
-        summary: legacyWorkbookInsights
-      }
-    });
-  }
+  async uploadWorkbook(file: UploadedWorkbookFile | undefined, user?: CurrentUser) {
+    if (!file?.buffer?.length) {
+      throw new BadRequestException("Arquivo XLSX nao enviado.");
+    }
+    this.assertSafeWorkbook(file);
 
-  async importProducts(sourceFile?: string) {
-    const selectedFile = sourceFile ?? process.env.LEGACY_EXCEL_PATH;
+    const uploadDir = this.uploadDir();
+    await mkdir(uploadDir, { recursive: true });
+
+    const fileHash = createHash("sha256").update(file.buffer).digest("hex");
+    const storedName = `${randomUUID()}.xlsx`;
+    const storedPath = resolve(uploadDir, storedName);
+    await writeFile(storedPath, file.buffer);
+
+    const report = await this.runLegacyWorkbookImport(storedPath);
+    const importErrors = report.legacyData?.importErrors ?? [];
+    const createdBy = this.safeUserId(user);
+
     const batch = await this.prisma.importBatch.create({
       data: {
-        sourceFile: selectedFile ?? "auto-detected legacy workbook",
-        status: "RECEIVED",
-        summary: { stage: "products" }
+        sourceFile: file.originalname,
+        originalFileName: file.originalname,
+        storedFilePath: storedPath,
+        fileHash,
+        fileSizeBytes: BigInt(file.size),
+        status: "CLEANED",
+        summary: this.reportSummary(report),
+        createdBy,
+        errors: importErrors.length ? { create: importErrors.map((error) => this.importErrorData(error)) } : undefined
+      },
+      include: { errors: { take: 100, orderBy: { createdAt: "asc" } } }
+    });
+
+    await this.audit.record({
+      userId: createdBy,
+      module: "import",
+      action: "upload",
+      entity: "ImportBatch",
+      entityId: batch.id,
+      after: {
+        originalFileName: batch.originalFileName,
+        fileHash: batch.fileHash,
+        fileSizeBytes: batch.fileSizeBytes?.toString(),
+        status: batch.status
       }
     });
 
+    return {
+      id: batch.id,
+      status: batch.status,
+      sourceFile: batch.sourceFile,
+      originalFileName: batch.originalFileName,
+      fileHash: batch.fileHash,
+      fileSizeBytes: batch.fileSizeBytes?.toString() ?? null,
+      summary: batch.summary,
+      errors: batch.errors
+    };
+  }
+
+  async importProducts(batchId: string | undefined, user?: CurrentUser) {
+    if (!batchId || !uuidPattern.test(batchId)) {
+      throw new BadRequestException("Informe o lote de importacao criado por upload.");
+    }
+
+    const batch = await this.prisma.importBatch.findUnique({ where: { id: batchId } });
+    if (!batch?.storedFilePath) {
+      throw new NotFoundException("Lote de importacao com arquivo armazenado nao encontrado.");
+    }
+
+    const userId = this.safeUserId(user);
+
     try {
-      const report = await this.runLegacyWorkbookImport(selectedFile);
+      const report = await this.runLegacyWorkbookImport(batch.storedFilePath);
       const legacyData = report.legacyData;
       const products = legacyData?.products ?? [];
       const importErrors = legacyData?.importErrors ?? [];
@@ -108,14 +213,17 @@ export class ImportService {
             defaultSectorId: sector.id,
             unit: product.unit ?? "kg",
             active: product.active ?? true,
-            notes: "Importado da planilha legada."
+            notes: "Importado da planilha legada.",
+            createdBy: userId,
+            updatedBy: userId
           },
           update: {
             name: product.name,
             defaultSectorId: sector.id,
             unit: product.unit ?? "kg",
             active: product.active ?? true,
-            notes: "Atualizado pela importacao da planilha legada."
+            notes: "Atualizado pela importacao da planilha legada.",
+            updatedBy: userId
           }
         });
 
@@ -144,37 +252,49 @@ export class ImportService {
         importedProducts += 1;
       }
 
+      await this.prisma.importError.deleteMany({ where: { batchId: batch.id } });
       if (importErrors.length) {
         await this.prisma.importError.createMany({
           data: importErrors.map((error) => ({
             batchId: batch.id,
-            sheetName: error.sheetName ?? null,
-            cell: error.cell ?? null,
-            rowNumber: error.rowNumber ?? null,
-            field: error.field ?? null,
-            message: error.message,
-            rawValue: error.rawValue ?? null
+            ...this.importErrorData(error)
           }))
         });
       }
 
       const summary = {
-        sourceFile: report.file,
+        ...this.reportSummary(report),
         importedProducts,
         duplicateProductCodes: legacyData?.duplicateProductCodes ?? [],
         duplicateWeightCodes: legacyData?.duplicateWeightCodes ?? [],
         importErrorCount: importErrors.length
       };
 
-      return this.prisma.importBatch.update({
+      const updated = await this.prisma.importBatch.update({
         where: { id: batch.id },
         data: {
           status: importErrors.length ? "IMPORTED_WITH_ERRORS" : "IMPORTED",
           summary,
           completedAt: new Date()
         },
-        include: { errors: { take: 10, orderBy: { createdAt: "asc" } } }
+        include: { errors: { take: 100, orderBy: { createdAt: "asc" } } }
       });
+
+      await this.audit.record({
+        userId,
+        module: "import",
+        action: "import_products",
+        entity: "ImportBatch",
+        entityId: batch.id,
+        before: { status: batch.status },
+        after: {
+          status: updated.status,
+          importedProducts,
+          importErrorCount: importErrors.length
+        }
+      });
+
+      return updated;
     } catch (error) {
       await this.prisma.importBatch.update({
         where: { id: batch.id },
@@ -184,19 +304,66 @@ export class ImportService {
           completedAt: new Date()
         }
       });
-      if (error instanceof BadRequestException) throw error;
+      if (error instanceof BadRequestException || error instanceof NotFoundException) throw error;
       throw new InternalServerErrorException(error instanceof Error ? error.message : "Falha ao importar produtos.");
     }
   }
 
-  private async runLegacyWorkbookImport(sourceFile?: string): Promise<LegacyImportReport> {
-    const scriptPath = this.resolveImportScript();
-    const args = [scriptPath];
-    if (sourceFile) {
-      args.push("--file", sourceFile);
+  private assertSafeWorkbook(file: UploadedWorkbookFile) {
+    const extension = extname(file.originalname).toLowerCase();
+    if (extension !== ".xlsx") {
+      throw new BadRequestException("Somente arquivos .xlsx sao aceitos.");
     }
+    if (file.size > maxUploadBytes) {
+      throw new BadRequestException("Arquivo excede o limite permitido para importacao.");
+    }
+    if (!xlsxMimeTypes.has(file.mimetype)) {
+      throw new BadRequestException("Tipo MIME do arquivo nao permitido para importacao.");
+    }
+    if (!file.buffer?.subarray(0, 2).equals(Buffer.from("PK"))) {
+      throw new BadRequestException("Assinatura do arquivo XLSX invalida.");
+    }
+  }
 
-    const { stdout } = await execFileAsync(process.env.PYTHON_BIN ?? "python", args, {
+  private importErrorData(error: LegacyImportError) {
+    return {
+      sheetName: error.sheetName ?? null,
+      cell: error.cell ?? null,
+      rowNumber: error.rowNumber ?? null,
+      field: error.field ?? null,
+      message: error.message,
+      rawValue: error.rawValue ?? null,
+      originalValue: error.rawValue ?? null
+    };
+  }
+
+  private reportSummary(report: LegacyImportReport) {
+    return {
+      sourceFile: report.file,
+      sheetCount: report.sheetCount ?? 0,
+      formulaCount: report.formulaCount ?? 0,
+      tableCount: report.tableCount ?? 0,
+      chartCount: report.chartCount ?? 0,
+      errors: report.errors ?? {},
+      productCount: report.legacyData?.productCount ?? 0,
+      importErrorCount: report.legacyData?.importErrorCount ?? report.legacyData?.importErrors?.length ?? 0,
+      duplicateProductCodes: report.legacyData?.duplicateProductCodes ?? [],
+      duplicateWeightCodes: report.legacyData?.duplicateWeightCodes ?? []
+    };
+  }
+
+  private safeUserId(user?: CurrentUser) {
+    return user?.id && uuidPattern.test(user.id) ? user.id : undefined;
+  }
+
+  private uploadDir() {
+    return resolve(process.cwd(), process.env.IMPORT_UPLOAD_DIR ?? "uploads/imports");
+  }
+
+  private async runLegacyWorkbookImport(sourceFile: string): Promise<LegacyImportReport> {
+    const scriptPath = this.resolveImportScript();
+    const pythonBin = process.env.PYTHON_BIN ?? (process.platform === "win32" ? "python" : "python3");
+    const { stdout } = await execFileAsync(pythonBin, [scriptPath, "--file", sourceFile], {
       maxBuffer: 20 * 1024 * 1024,
       cwd: resolve(__dirname, "../../../../..")
     });

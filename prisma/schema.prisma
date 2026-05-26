@@ -63,6 +63,12 @@ enum ImportStatus {
   FAILED
 }
 
+enum ImportErrorStatus {
+  PENDING
+  CORRECTED
+  IGNORED
+}
+
 model User {
   id           String     @id @default(uuid()) @db.Uuid
   email        String     @unique
@@ -140,40 +146,40 @@ model Sector {
 }
 
 model ProductionLine {
-  id          String            @id @default(uuid()) @db.Uuid
-  sectorId    String            @map("sector_id") @db.Uuid
-  code        String
-  name        String
-  active      Boolean           @default(true)
-  createdAt   DateTime          @default(now()) @map("created_at")
-  updatedAt   DateTime          @updatedAt @map("updated_at")
-  deletedAt   DateTime?         @map("deleted_at")
-  sector      Sector            @relation(fields: [sectorId], references: [id])
-  entries     ProductionEntry[]
-  downtimes   DowntimeEntry[]
+  id        String            @id @default(uuid()) @db.Uuid
+  sectorId  String            @map("sector_id") @db.Uuid
+  code      String
+  name      String
+  active    Boolean           @default(true)
+  createdAt DateTime          @default(now()) @map("created_at")
+  updatedAt DateTime          @updatedAt @map("updated_at")
+  deletedAt DateTime?         @map("deleted_at")
+  sector    Sector            @relation(fields: [sectorId], references: [id])
+  entries   ProductionEntry[]
+  downtimes DowntimeEntry[]
 
   @@unique([sectorId, code])
   @@map("production_lines")
 }
 
 model Product {
-  id            String               @id @default(uuid()) @db.Uuid
-  code          String               @unique
-  name          String
-  defaultSectorId String             @map("default_sector_id") @db.Uuid
-  unit          String               @default("kg")
-  active        Boolean              @default(true)
-  notes         String?
-  createdAt     DateTime             @default(now()) @map("created_at")
-  updatedAt     DateTime             @updatedAt @map("updated_at")
-  deletedAt     DateTime?            @map("deleted_at")
-  createdBy     String?              @map("created_by") @db.Uuid
-  updatedBy     String?              @map("updated_by") @db.Uuid
-  defaultSector Sector               @relation(fields: [defaultSectorId], references: [id])
-  weightConfig  ProductWeightConfig?
-  orders        ProductionOrder[]
-  entries       ProductionEntry[]
-  losses        LossEntry[]
+  id              String               @id @default(uuid()) @db.Uuid
+  code            String               @unique
+  name            String
+  defaultSectorId String               @map("default_sector_id") @db.Uuid
+  unit            String               @default("kg")
+  active          Boolean              @default(true)
+  notes           String?
+  createdAt       DateTime             @default(now()) @map("created_at")
+  updatedAt       DateTime             @updatedAt @map("updated_at")
+  deletedAt       DateTime?            @map("deleted_at")
+  createdBy       String?              @map("created_by") @db.Uuid
+  updatedBy       String?              @map("updated_by") @db.Uuid
+  defaultSector   Sector               @relation(fields: [defaultSectorId], references: [id])
+  weightConfig    ProductWeightConfig?
+  orders          ProductionOrder[]
+  entries         ProductionEntry[]
+  losses          LossEntry[]
 
   @@index([defaultSectorId])
   @@map("products")
@@ -197,24 +203,25 @@ model ProductWeightConfig {
 }
 
 model WeeklyPeriod {
-  id          String            @id @default(uuid()) @db.Uuid
-  year        Int
-  month       Int
-  weekNumber  Int               @map("week_number")
-  label       String
-  startsOn    DateTime          @map("starts_on") @db.Date
-  endsOn      DateTime          @map("ends_on") @db.Date
-  status      WeekStatus        @default(OPEN)
-  closedAt    DateTime?         @map("closed_at")
-  archivedAt  DateTime?         @map("archived_at")
-  createdAt   DateTime          @default(now()) @map("created_at")
-  updatedAt   DateTime          @updatedAt @map("updated_at")
-  deletedAt   DateTime?         @map("deleted_at")
-  entries     ProductionEntry[]
-  orders      ProductionOrder[]
-  losses      LossEntry[]
-  downtimes   DowntimeEntry[]
-  snapshots   DashboardSnapshot[]
+  id                  String              @id @default(uuid()) @db.Uuid
+  year                Int
+  month               Int
+  weekNumber          Int                 @map("week_number")
+  label               String
+  startsOn            DateTime            @map("starts_on") @db.Date
+  endsOn              DateTime            @map("ends_on") @db.Date
+  status              WeekStatus          @default(OPEN)
+  closedAt            DateTime?           @map("closed_at")
+  archivedAt          DateTime?           @map("archived_at")
+  createdAt           DateTime            @default(now()) @map("created_at")
+  updatedAt           DateTime            @updatedAt @map("updated_at")
+  deletedAt           DateTime?           @map("deleted_at")
+  entries             ProductionEntry[]
+  orders              ProductionOrder[]
+  losses              LossEntry[]
+  downtimes           DowntimeEntry[]
+  productivityEntries ProductivityEntry[]
+  snapshots           DashboardSnapshot[]
 
   @@unique([year, month, weekNumber])
   @@index([status])
@@ -222,60 +229,61 @@ model WeeklyPeriod {
 }
 
 model ProductionOrder {
-  id              String            @id @default(uuid()) @db.Uuid
-  weekId          String            @map("week_id") @db.Uuid
-  productId       String            @map("product_id") @db.Uuid
-  sectorCode      SectorCode        @map("sector_code")
-  orderNumber     String            @map("order_number")
-  status          String            @default("OPEN")
-  createdAt       DateTime          @default(now()) @map("created_at")
-  updatedAt       DateTime          @updatedAt @map("updated_at")
-  deletedAt       DateTime?         @map("deleted_at")
-  week            WeeklyPeriod      @relation(fields: [weekId], references: [id])
-  product         Product           @relation(fields: [productId], references: [id])
-  entries         ProductionEntry[]
+  id          String            @id @default(uuid()) @db.Uuid
+  weekId      String            @map("week_id") @db.Uuid
+  productId   String            @map("product_id") @db.Uuid
+  sectorCode  SectorCode        @map("sector_code")
+  orderNumber String            @map("order_number")
+  status      String            @default("OPEN")
+  createdAt   DateTime          @default(now()) @map("created_at")
+  updatedAt   DateTime          @updatedAt @map("updated_at")
+  deletedAt   DateTime?         @map("deleted_at")
+  week        WeeklyPeriod      @relation(fields: [weekId], references: [id])
+  product     Product           @relation(fields: [productId], references: [id])
+  entries     ProductionEntry[]
+  losses      LossEntry[]
 
   @@unique([weekId, orderNumber, productId])
   @@map("production_orders")
 }
 
 model ProductionEntry {
-  id                      String            @id @default(uuid()) @db.Uuid
-  weekId                  String            @map("week_id") @db.Uuid
-  sectorId                String            @map("sector_id") @db.Uuid
-  lineId                  String?           @map("line_id") @db.Uuid
-  productId               String            @map("product_id") @db.Uuid
-  productionOrderId       String?           @map("production_order_id") @db.Uuid
-  date                    DateTime          @db.Date
-  productionOrder         String            @map("production_order")
-  plannedBatches          Decimal           @map("planned_batches") @db.Decimal(12, 3)
-  realizedBatches         Decimal           @map("realized_batches") @db.Decimal(12, 3)
-  usedReworkKg            Decimal           @default(0) @map("used_rework_kg") @db.Decimal(12, 3)
-  packedBoxes             Decimal           @map("packed_boxes") @db.Decimal(12, 3)
-  producedKg              Decimal           @map("produced_kg") @db.Decimal(14, 3)
-  weighingLossKg          Decimal           @default(0) @map("weighing_loss_kg") @db.Decimal(12, 3)
-  generatedReworkKg       Decimal           @default(0) @map("generated_rework_kg") @db.Decimal(12, 3)
-  expectedYieldKg         Decimal           @map("expected_yield_kg") @db.Decimal(14, 3)
-  realYieldPercent        Decimal           @map("real_yield_percent") @db.Decimal(10, 6)
-  massWeightKg            Decimal           @map("mass_weight_kg") @db.Decimal(12, 3)
-  boxWeightKg             Decimal           @map("box_weight_kg") @db.Decimal(12, 3)
-  targetPackageWeightG    Decimal           @map("target_package_weight_g") @db.Decimal(12, 3)
-  averagePackageWeightG   Decimal?          @map("average_package_weight_g") @db.Decimal(12, 3)
-  overweightGPerPackage   Decimal           @map("overweight_g_per_package") @db.Decimal(12, 3)
-  overweightTotalKg       Decimal           @map("overweight_total_kg") @db.Decimal(14, 3)
-  overweightPercent       Decimal           @map("overweight_percent") @db.Decimal(10, 6)
-  status                  AlertStatus       @default(OK)
-  notes                   String?
-  createdAt               DateTime          @default(now()) @map("created_at")
-  updatedAt               DateTime          @updatedAt @map("updated_at")
-  deletedAt               DateTime?         @map("deleted_at")
-  createdBy               String?           @map("created_by") @db.Uuid
-  updatedBy               String?           @map("updated_by") @db.Uuid
-  week                    WeeklyPeriod      @relation(fields: [weekId], references: [id])
-  sector                  Sector            @relation(fields: [sectorId], references: [id])
-  line                    ProductionLine?   @relation(fields: [lineId], references: [id])
-  product                 Product           @relation(fields: [productId], references: [id])
-  order                   ProductionOrder?  @relation(fields: [productionOrderId], references: [id])
+  id                    String           @id @default(uuid()) @db.Uuid
+  weekId                String           @map("week_id") @db.Uuid
+  sectorId              String           @map("sector_id") @db.Uuid
+  lineId                String?          @map("line_id") @db.Uuid
+  productId             String           @map("product_id") @db.Uuid
+  productionOrderId     String?          @map("production_order_id") @db.Uuid
+  date                  DateTime         @db.Date
+  productionOrder       String           @map("production_order")
+  plannedBatches        Decimal          @map("planned_batches") @db.Decimal(12, 3)
+  realizedBatches       Decimal          @map("realized_batches") @db.Decimal(12, 3)
+  usedReworkKg          Decimal          @default(0) @map("used_rework_kg") @db.Decimal(12, 3)
+  packedBoxes           Decimal          @map("packed_boxes") @db.Decimal(12, 3)
+  producedKg            Decimal          @map("produced_kg") @db.Decimal(14, 3)
+  weighingLossKg        Decimal          @default(0) @map("weighing_loss_kg") @db.Decimal(12, 3)
+  generatedReworkKg     Decimal          @default(0) @map("generated_rework_kg") @db.Decimal(12, 3)
+  expectedYieldKg       Decimal          @map("expected_yield_kg") @db.Decimal(14, 3)
+  realYieldPercent      Decimal          @map("real_yield_percent") @db.Decimal(10, 6)
+  massWeightKg          Decimal          @map("mass_weight_kg") @db.Decimal(12, 3)
+  boxWeightKg           Decimal          @map("box_weight_kg") @db.Decimal(12, 3)
+  targetPackageWeightG  Decimal          @map("target_package_weight_g") @db.Decimal(12, 3)
+  averagePackageWeightG Decimal?         @map("average_package_weight_g") @db.Decimal(12, 3)
+  overweightGPerPackage Decimal          @map("overweight_g_per_package") @db.Decimal(12, 3)
+  overweightTotalKg     Decimal          @map("overweight_total_kg") @db.Decimal(14, 3)
+  overweightPercent     Decimal          @map("overweight_percent") @db.Decimal(10, 6)
+  status                AlertStatus      @default(OK)
+  notes                 String?
+  createdAt             DateTime         @default(now()) @map("created_at")
+  updatedAt             DateTime         @updatedAt @map("updated_at")
+  deletedAt             DateTime?        @map("deleted_at")
+  createdBy             String?          @map("created_by") @db.Uuid
+  updatedBy             String?          @map("updated_by") @db.Uuid
+  week                  WeeklyPeriod     @relation(fields: [weekId], references: [id])
+  sector                Sector           @relation(fields: [sectorId], references: [id])
+  line                  ProductionLine?  @relation(fields: [lineId], references: [id])
+  product               Product          @relation(fields: [productId], references: [id])
+  order                 ProductionOrder? @relation(fields: [productionOrderId], references: [id])
 
   @@index([weekId, sectorId, date])
   @@index([productId])
@@ -284,82 +292,84 @@ model ProductionEntry {
 }
 
 model LossType {
-  id          String       @id @default(uuid()) @db.Uuid
-  code        LossTypeCode @unique
-  name        String
-  defaultGoalKg Decimal?   @map("default_goal_kg") @db.Decimal(12, 3)
-  active      Boolean      @default(true)
-  createdAt   DateTime     @default(now()) @map("created_at")
-  updatedAt   DateTime     @updatedAt @map("updated_at")
-  entries     LossEntry[]
+  id            String       @id @default(uuid()) @db.Uuid
+  code          LossTypeCode @unique
+  name          String
+  defaultGoalKg Decimal?     @map("default_goal_kg") @db.Decimal(12, 3)
+  active        Boolean      @default(true)
+  createdAt     DateTime     @default(now()) @map("created_at")
+  updatedAt     DateTime     @updatedAt @map("updated_at")
+  entries       LossEntry[]
 
   @@map("loss_types")
 }
 
 model LossEntry {
-  id                String       @id @default(uuid()) @db.Uuid
-  weekId            String       @map("week_id") @db.Uuid
-  date              DateTime     @db.Date
-  sectorId          String?      @map("sector_id") @db.Uuid
-  productId         String?      @map("product_id") @db.Uuid
-  productionOrderId String?      @map("production_order_id") @db.Uuid
-  lossTypeId        String       @map("loss_type_id") @db.Uuid
-  quantityKg        Decimal      @map("quantity_kg") @db.Decimal(12, 3)
+  id                String           @id @default(uuid()) @db.Uuid
+  weekId            String           @map("week_id") @db.Uuid
+  date              DateTime         @db.Date
+  sectorId          String?          @map("sector_id") @db.Uuid
+  productId         String?          @map("product_id") @db.Uuid
+  productionOrderId String?          @map("production_order_id") @db.Uuid
+  lossTypeId        String           @map("loss_type_id") @db.Uuid
+  quantityKg        Decimal          @map("quantity_kg") @db.Decimal(12, 3)
   reason            String?
   notes             String?
-  createdAt         DateTime     @default(now()) @map("created_at")
-  updatedAt         DateTime     @updatedAt @map("updated_at")
-  deletedAt         DateTime?    @map("deleted_at")
-  createdBy         String?      @map("created_by") @db.Uuid
-  updatedBy         String?      @map("updated_by") @db.Uuid
-  week              WeeklyPeriod @relation(fields: [weekId], references: [id])
-  sector            Sector?      @relation(fields: [sectorId], references: [id])
-  product           Product?     @relation(fields: [productId], references: [id])
-  lossType          LossType     @relation(fields: [lossTypeId], references: [id])
+  createdAt         DateTime         @default(now()) @map("created_at")
+  updatedAt         DateTime         @updatedAt @map("updated_at")
+  deletedAt         DateTime?        @map("deleted_at")
+  createdBy         String?          @map("created_by") @db.Uuid
+  updatedBy         String?          @map("updated_by") @db.Uuid
+  week              WeeklyPeriod     @relation(fields: [weekId], references: [id])
+  sector            Sector?          @relation(fields: [sectorId], references: [id])
+  product           Product?         @relation(fields: [productId], references: [id])
+  productionOrder   ProductionOrder? @relation(fields: [productionOrderId], references: [id])
+  lossType          LossType         @relation(fields: [lossTypeId], references: [id])
 
   @@index([weekId, date])
   @@index([lossTypeId])
+  @@index([productionOrderId])
   @@map("loss_entries")
 }
 
 model DowntimeReason {
-  id          String           @id @default(uuid()) @db.Uuid
-  name        String           @unique
-  active      Boolean          @default(true)
-  createdAt   DateTime         @default(now()) @map("created_at")
-  updatedAt   DateTime         @updatedAt @map("updated_at")
-  entries     DowntimeEntry[]
+  id        String          @id @default(uuid()) @db.Uuid
+  name      String          @unique
+  active    Boolean         @default(true)
+  createdAt DateTime        @default(now()) @map("created_at")
+  updatedAt DateTime        @updatedAt @map("updated_at")
+  entries   DowntimeEntry[]
 
   @@map("downtime_reasons")
 }
 
 model DowntimeEntry {
-  id                String          @id @default(uuid()) @db.Uuid
-  weekId            String          @map("week_id") @db.Uuid
-  date              DateTime        @db.Date
-  sectorId          String          @map("sector_id") @db.Uuid
-  lineId            String?         @map("line_id") @db.Uuid
-  productionStart   DateTime        @map("production_start")
-  productionEnd     DateTime        @map("production_end")
-  producedMassKg    Decimal         @map("produced_mass_kg") @db.Decimal(14, 3)
-  downtimeStart     DateTime        @map("downtime_start")
-  downtimeEnd       DateTime        @map("downtime_end")
-  stoppedMinutes    Decimal         @map("stopped_minutes") @db.Decimal(12, 2)
-  stoppedPercent    Decimal         @map("stopped_percent") @db.Decimal(10, 6)
-  realKgHour        Decimal         @map("real_kg_hour") @db.Decimal(14, 3)
-  possibleKgHour    Decimal         @map("possible_kg_hour") @db.Decimal(14, 3)
-  status            AlertStatus     @default(OK)
-  downtimeReasonId  String          @map("downtime_reason_id") @db.Uuid
-  notes             String?
-  createdAt         DateTime        @default(now()) @map("created_at")
-  updatedAt         DateTime        @updatedAt @map("updated_at")
-  deletedAt         DateTime?       @map("deleted_at")
-  createdBy         String?         @map("created_by") @db.Uuid
-  updatedBy         String?         @map("updated_by") @db.Uuid
-  week              WeeklyPeriod    @relation(fields: [weekId], references: [id])
-  sector            Sector          @relation(fields: [sectorId], references: [id])
-  line              ProductionLine? @relation(fields: [lineId], references: [id])
-  reason            DowntimeReason  @relation(fields: [downtimeReasonId], references: [id])
+  id               String          @id @default(uuid()) @db.Uuid
+  weekId           String          @map("week_id") @db.Uuid
+  date             DateTime        @db.Date
+  sectorId         String          @map("sector_id") @db.Uuid
+  lineId           String?         @map("line_id") @db.Uuid
+  productionStart  DateTime        @map("production_start")
+  productionEnd    DateTime        @map("production_end")
+  producedMassKg   Decimal         @map("produced_mass_kg") @db.Decimal(14, 3)
+  downtimeStart    DateTime        @map("downtime_start")
+  downtimeEnd      DateTime        @map("downtime_end")
+  stoppedMinutes   Decimal         @map("stopped_minutes") @db.Decimal(12, 2)
+  stoppedPercent   Decimal         @map("stopped_percent") @db.Decimal(10, 6)
+  realKgHour       Decimal         @map("real_kg_hour") @db.Decimal(14, 3)
+  possibleKgHour   Decimal         @map("possible_kg_hour") @db.Decimal(14, 3)
+  status           AlertStatus     @default(OK)
+  downtimeReasonId String          @map("downtime_reason_id") @db.Uuid
+  notes            String?
+  createdAt        DateTime        @default(now()) @map("created_at")
+  updatedAt        DateTime        @updatedAt @map("updated_at")
+  deletedAt        DateTime?       @map("deleted_at")
+  createdBy        String?         @map("created_by") @db.Uuid
+  updatedBy        String?         @map("updated_by") @db.Uuid
+  week             WeeklyPeriod    @relation(fields: [weekId], references: [id])
+  sector           Sector          @relation(fields: [sectorId], references: [id])
+  line             ProductionLine? @relation(fields: [lineId], references: [id])
+  reason           DowntimeReason  @relation(fields: [downtimeReasonId], references: [id])
 
   @@index([weekId, date])
   @@index([downtimeReasonId])
@@ -367,15 +377,16 @@ model DowntimeEntry {
 }
 
 model ProductivityEntry {
-  id              String      @id @default(uuid()) @db.Uuid
-  weekId          String      @map("week_id") @db.Uuid
-  sectorCode      SectorCode  @map("sector_code")
-  date            DateTime    @db.Date
-  producedKg      Decimal     @map("produced_kg") @db.Decimal(14, 3)
-  productiveHours Decimal     @map("productive_hours") @db.Decimal(12, 3)
-  kgPerHour       Decimal     @map("kg_per_hour") @db.Decimal(14, 3)
-  createdAt       DateTime    @default(now()) @map("created_at")
-  updatedAt       DateTime    @updatedAt @map("updated_at")
+  id              String       @id @default(uuid()) @db.Uuid
+  weekId          String       @map("week_id") @db.Uuid
+  sectorCode      SectorCode   @map("sector_code")
+  date            DateTime     @db.Date
+  producedKg      Decimal      @map("produced_kg") @db.Decimal(14, 3)
+  productiveHours Decimal      @map("productive_hours") @db.Decimal(12, 3)
+  kgPerHour       Decimal      @map("kg_per_hour") @db.Decimal(14, 3)
+  createdAt       DateTime     @default(now()) @map("created_at")
+  updatedAt       DateTime     @updatedAt @map("updated_at")
+  week            WeeklyPeriod @relation(fields: [weekId], references: [id])
 
   @@index([weekId, sectorCode])
   @@map("productivity_entries")
@@ -398,11 +409,11 @@ model Goal {
 }
 
 model DashboardSnapshot {
-  id        String       @id @default(uuid()) @db.Uuid
-  weekId    String?      @map("week_id") @db.Uuid
+  id        String        @id @default(uuid()) @db.Uuid
+  weekId    String?       @map("week_id") @db.Uuid
   filter    Json
   payload   Json
-  createdAt DateTime     @default(now()) @map("created_at")
+  createdAt DateTime      @default(now()) @map("created_at")
   week      WeeklyPeriod? @relation(fields: [weekId], references: [id])
 
   @@map("dashboard_snapshots")
@@ -434,18 +445,18 @@ model PresentationExport {
 }
 
 model AuditLog {
-  id          String   @id @default(uuid()) @db.Uuid
-  userId      String?  @map("user_id") @db.Uuid
-  module      String
-  action      String
-  entity      String
-  entityId    String?  @map("entity_id")
-  before      Json?
-  after       Json?
-  reason      String?
-  ipAddress   String?  @map("ip_address")
-  createdAt   DateTime @default(now()) @map("created_at")
-  user        User?    @relation(fields: [userId], references: [id])
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String?  @map("user_id") @db.Uuid
+  module    String
+  action    String
+  entity    String
+  entityId  String?  @map("entity_id")
+  before    Json?
+  after     Json?
+  reason    String?
+  ipAddress String?  @map("ip_address")
+  createdAt DateTime @default(now()) @map("created_at")
+  user      User?    @relation(fields: [userId], references: [id])
 
   @@index([module, action])
   @@index([entity, entityId])
@@ -467,12 +478,12 @@ model Attachment {
 }
 
 model Comment {
-  id        String   @id @default(uuid()) @db.Uuid
+  id        String    @id @default(uuid()) @db.Uuid
   entity    String
-  entityId  String   @map("entity_id")
+  entityId  String    @map("entity_id")
   body      String
-  createdAt DateTime @default(now()) @map("created_at")
-  createdBy String?  @map("created_by") @db.Uuid
+  createdAt DateTime  @default(now()) @map("created_at")
+  createdBy String?   @map("created_by") @db.Uuid
   deletedAt DateTime? @map("deleted_at")
 
   @@index([entity, entityId])
@@ -490,31 +501,42 @@ model SystemSetting {
 }
 
 model ImportBatch {
-  id          String        @id @default(uuid()) @db.Uuid
-  sourceFile  String        @map("source_file")
-  status      ImportStatus  @default(RECEIVED)
-  summary     Json?
-  createdAt   DateTime      @default(now()) @map("created_at")
-  completedAt DateTime?     @map("completed_at")
-  createdBy   String?       @map("created_by") @db.Uuid
-  errors      ImportError[]
+  id               String        @id @default(uuid()) @db.Uuid
+  sourceFile       String        @map("source_file")
+  originalFileName String?       @map("original_file_name")
+  storedFilePath   String?       @map("stored_file_path")
+  fileHash         String?       @map("file_hash")
+  fileSizeBytes    BigInt?       @map("file_size_bytes")
+  status           ImportStatus  @default(RECEIVED)
+  summary          Json?
+  createdAt        DateTime      @default(now()) @map("created_at")
+  completedAt      DateTime?     @map("completed_at")
+  createdBy        String?       @map("created_by") @db.Uuid
+  errors           ImportError[]
 
   @@map("import_batches")
 }
 
 model ImportError {
-  id          String      @id @default(uuid()) @db.Uuid
-  batchId     String      @map("batch_id") @db.Uuid
-  sheetName   String?     @map("sheet_name")
-  cell        String?
-  rowNumber   Int?        @map("row_number")
-  field       String?
-  message     String
-  rawValue    String?     @map("raw_value")
-  createdAt   DateTime    @default(now()) @map("created_at")
-  batch       ImportBatch @relation(fields: [batchId], references: [id])
+  id              String            @id @default(uuid()) @db.Uuid
+  batchId         String            @map("batch_id") @db.Uuid
+  sheetName       String?           @map("sheet_name")
+  cell            String?
+  rowNumber       Int?              @map("row_number")
+  field           String?
+  message         String
+  rawValue        String?           @map("raw_value")
+  originalValue   String?           @map("original_value")
+  correctedValue  String?           @map("corrected_value")
+  status          ImportErrorStatus @default(PENDING)
+  resolutionNotes String?           @map("resolution_notes")
+  resolvedBy      String?           @map("resolved_by") @db.Uuid
+  resolvedAt      DateTime?         @map("resolved_at")
+  createdAt       DateTime          @default(now()) @map("created_at")
+  batch           ImportBatch       @relation(fields: [batchId], references: [id])
 
   @@index([batchId])
+  @@index([status])
   @@map("import_errors")
 }
 

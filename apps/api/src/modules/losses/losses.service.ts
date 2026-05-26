@@ -1,7 +1,16 @@
-import { Injectable } from "@nestjs/common";
+import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "../../infrastructure/database/prisma.service";
 import { lossEntrySchema } from "../../domain/validators/schemas";
 import { AuditService } from "../audit/audit.service";
+import { CurrentUser } from "../../infrastructure/security/current-user";
+
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function dateOnly(value: Date) {
+  const date = new Date(value);
+  date.setUTCHours(0, 0, 0, 0);
+  return date;
+}
 
 @Injectable()
 export class LossesService {
@@ -22,8 +31,16 @@ export class LossesService {
     return this.prisma.lossType.findMany({ where: { active: true }, orderBy: { name: "asc" } });
   }
 
-  async create(payload: unknown) {
+  async create(payload: unknown, user?: CurrentUser) {
     const input = lossEntrySchema.parse(payload);
+    const week = await this.prisma.weeklyPeriod.findUnique({ where: { id: input.weekId } });
+    if (!week) throw new NotFoundException("Semana nao encontrada.");
+    if (week.status !== "OPEN" && week.status !== "REVIEW") {
+      throw new BadRequestException("Semana fechada ou arquivada nao aceita perdas.");
+    }
+    this.assertDateInsideWeek(input.date, week.startsOn, week.endsOn);
+    const userId = this.safeUserId(user);
+
     const loss = await this.prisma.lossEntry.create({
       data: {
         weekId: input.weekId,
@@ -34,11 +51,13 @@ export class LossesService {
         lossTypeId: input.lossTypeId,
         quantityKg: input.quantityKg,
         reason: input.reason,
-        notes: input.notes
+        notes: input.notes,
+        createdBy: userId,
+        updatedBy: userId
       },
       include: { lossType: true, product: true, sector: true }
     });
-    await this.audit.record({ module: "losses", action: "create", entity: "LossEntry", entityId: loss.id, after: loss });
+    await this.audit.record({ userId, module: "losses", action: "create", entity: "LossEntry", entityId: loss.id, after: loss });
     return loss;
   }
 
@@ -53,5 +72,16 @@ export class LossesService {
       const type = types.find((item) => item.id === row.lossTypeId);
       return { type: type?.name ?? row.lossTypeId, quantityKg: Number(row._sum.quantityKg ?? 0) };
     });
+  }
+
+  private assertDateInsideWeek(date: Date, startsOn: Date, endsOn: Date) {
+    const target = dateOnly(date);
+    if (target < dateOnly(startsOn) || target > dateOnly(endsOn)) {
+      throw new BadRequestException("Data da perda precisa pertencer ao periodo da semana selecionada.");
+    }
+  }
+
+  private safeUserId(user?: CurrentUser) {
+    return user?.id && uuidPattern.test(user.id) ? user.id : undefined;
   }
 }

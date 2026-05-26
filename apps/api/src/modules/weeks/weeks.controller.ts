@@ -1,4 +1,6 @@
 import { Body, Controller, Get, Param, Patch, Post } from "@nestjs/common";
+import { CurrentUser } from "../../infrastructure/security/current-user";
+import { CurrentUserData } from "../auth/current-user.decorator";
 import { Roles } from "../auth/roles.decorator";
 import { WeeksService } from "./weeks.service";
 
@@ -14,25 +16,25 @@ export class WeeksController {
 
   @Roles("ADMIN", "MANAGER", "SUPERVISOR")
   @Post()
-  create(@Body() body: unknown) {
-    return this.weeks.create(body);
+  create(@Body() body: unknown, @CurrentUserData() user?: CurrentUser) {
+    return this.weeks.create(body, user);
   }
 
   @Roles("ADMIN", "MANAGER", "SUPERVISOR")
   @Patch(":id/close")
-  close(@Param("id") id: string) {
-    return this.weeks.close(id);
+  close(@Param("id") id: string, @CurrentUserData() user?: CurrentUser) {
+    return this.weeks.close(id, user);
   }
 
   @Roles("ADMIN", "MANAGER")
   @Patch(":id/reopen")
-  reopen(@Param("id") id: string, @Body() body: { reason?: string }) {
-    return this.weeks.reopen(id, body?.reason);
+  reopen(@Param("id") id: string, @Body() body: { reason?: string }, @CurrentUserData() user?: CurrentUser) {
+    return this.weeks.reopen(id, body?.reason, user);
   }
 
   @Roles("ADMIN", "MANAGER")
   @Patch(":id/archive")
-  archive(@Param("id") id: string) {
-    return this.weeks.archive(id);
+  archive(@Param("id") id: string, @CurrentUserData() user?: CurrentUser) {
+    return this.weeks.archive(id, user);
   }
 }

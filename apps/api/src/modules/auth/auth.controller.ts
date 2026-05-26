@@ -1,4 +1,5 @@
 import { Body, Controller, Get, Post, Res } from "@nestjs/common";
+import { Throttle } from "@nestjs/throttler";
 import { Response } from "express";
 import { CurrentUser } from "../../infrastructure/security/current-user";
 import { CurrentUserData } from "./current-user.decorator";
@@ -30,6 +31,7 @@ export class AuthController {
   constructor(private readonly auth: AuthService) {}
 
   @Public()
+  @Throttle({ default: { limit: 8, ttl: 60_000 } })
   @Post("login")
   async login(@Body() body: unknown, @Res({ passthrough: true }) response: Response) {
     const session = await this.auth.login(body);
@@ -49,9 +51,9 @@ export class AuthController {
     };
   }
 
-  @Public()
   @Post("logout")
-  logout(@Res({ passthrough: true }) response: Response) {
+  async logout(@CurrentUserData() user: CurrentUser | undefined, @Res({ passthrough: true }) response: Response) {
+    await this.auth.logout(user);
     response.clearCookie(sessionCookieName, { path: "/" });
     response.clearCookie(sessionFlagCookieName, { path: "/" });
     return { ok: true };

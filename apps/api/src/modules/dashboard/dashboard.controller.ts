@@ -13,7 +13,7 @@ export class DashboardController {
     return this.dashboard.health();
   }
 
-  @Public()
+  @Roles("ADMIN")
   @Get("health/db")
   dbHealth() {
     return this.dashboard.dbHealth();

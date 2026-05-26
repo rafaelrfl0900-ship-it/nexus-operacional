@@ -2,6 +2,10 @@ import { Injectable } from "@nestjs/common";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { PrismaService } from "../../infrastructure/database/prisma.service";
+import { CurrentUser } from "../../infrastructure/security/current-user";
+import { AuditService } from "../audit/audit.service";
+
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 const createUserSchema = z.object({
   email: z.string().email(),
@@ -12,7 +16,10 @@ const createUserSchema = z.object({
 
 @Injectable()
 export class UsersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly audit: AuditService
+  ) {}
 
   list() {
     return this.prisma.user.findMany({
@@ -29,7 +36,7 @@ export class UsersService {
     });
   }
 
-  async create(payload: unknown) {
+  async create(payload: unknown, currentUser?: CurrentUser) {
     const input = createUserSchema.parse(payload);
     const user = await this.prisma.user.create({
       data: {
@@ -45,9 +52,22 @@ export class UsersService {
       skipDuplicates: true
     });
 
-    return this.prisma.user.findUnique({
+    const created = await this.prisma.user.findUnique({
       where: { id: user.id },
       select: { id: true, email: true, name: true, active: true, roles: { include: { role: true } } }
     });
+    await this.audit.record({
+      userId: this.safeUserId(currentUser),
+      module: "users",
+      action: "create",
+      entity: "User",
+      entityId: user.id,
+      after: created
+    });
+    return created;
+  }
+
+  private safeUserId(user?: CurrentUser) {
+    return user?.id && uuidPattern.test(user.id) ? user.id : undefined;
   }
 }

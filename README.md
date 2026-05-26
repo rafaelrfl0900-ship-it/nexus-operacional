@@ -88,8 +88,9 @@ See `docs/production-deploy.md` for a step-by-step production deployment guide.
 ## Important URLs
 
 - Web: `http://localhost:3000`
-- API: `http://localhost:3333/api`
-- Health: `http://localhost:3333/api/health`
+- API pelo frontend Docker: `http://localhost:3000/api`
+- API direta local: `http://localhost:3333/api`
+- Health publico minimo: `http://localhost:3000/api/health`
 
 ## Initial admin
 
@@ -101,6 +102,8 @@ Set a temporary strong password in `.env` before running `npm.cmd run prisma:see
 ## Legacy workbook import
 
 The scripts tolerate invalid cells and formula errors such as `#N/A`, `#REF!`, `#DIV/0!` and `#VALUE!`.
+
+In the operational app, workbook import must go through the authenticated upload flow at `/api/import/upload`. The browser no longer sends arbitrary server file paths; the API stores the XLSX privately, calculates SHA-256 and creates an auditable import batch.
 
 ```powershell
 $xlsx = Get-ChildItem $env:USERPROFILE\Downloads -Filter '*MAIO*2026*(9).xlsx' | Select-Object -First 1 -ExpandProperty FullName

@@ -1,4 +1,6 @@
 import { Body, Controller, Get, Post, Query } from "@nestjs/common";
+import { CurrentUser } from "../../infrastructure/security/current-user";
+import { CurrentUserData } from "../auth/current-user.decorator";
 import { Roles } from "../auth/roles.decorator";
 import { DowntimeService } from "./downtime.service";
 
@@ -26,7 +28,7 @@ export class DowntimeController {
 
   @Roles("ADMIN", "SUPERVISOR", "OPERATOR")
   @Post()
-  create(@Body() body: unknown) {
-    return this.downtime.create(body);
+  create(@Body() body: unknown, @CurrentUserData() user?: CurrentUser) {
+    return this.downtime.create(body, user);
   }
 }

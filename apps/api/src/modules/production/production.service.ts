@@ -5,11 +5,19 @@ import { calculateProductionEntry } from "../../domain/calculations/production-c
 import { ProductWeightConfig } from "../../domain/calculations/types";
 import { classifyRule } from "../../domain/alerts/alert-engine";
 import { AuditService } from "../audit/audit.service";
+import { CurrentUser } from "../../infrastructure/security/current-user";
 
 const severity = { OK: 0, MEDIUM: 1, ATTENTION: 2, CRITICAL: 3 } as const;
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function worstStatus(...statuses: Array<keyof typeof severity>) {
   return statuses.sort((a, b) => severity[b] - severity[a])[0] ?? "OK";
+}
+
+function dateOnly(value: Date) {
+  const date = new Date(value);
+  date.setUTCHours(0, 0, 0, 0);
+  return date;
 }
 
 @Injectable()
@@ -49,13 +57,14 @@ export class ProductionService {
     });
   }
 
-  async create(payload: unknown) {
+  async create(payload: unknown, user?: CurrentUser) {
     const input = productionEntrySchema.parse(payload);
     const week = await this.prisma.weeklyPeriod.findUnique({ where: { id: input.weekId } });
     if (!week) throw new NotFoundException("Semana nao encontrada.");
     if (week.status !== "OPEN" && week.status !== "REVIEW") {
       throw new BadRequestException("Semana fechada ou arquivada nao aceita novos lancamentos.");
     }
+    this.assertDateInsideWeek(input.date, week.startsOn, week.endsOn);
 
     const product = await this.prisma.product.findUnique({
       where: { id: input.productId },
@@ -136,35 +145,98 @@ export class ProductionService {
         overweightTotalKg: calculated.overweightTotalKg,
         overweightPercent: calculated.overweightPercent,
         status: worstStatus(yieldStatus, overweightStatus),
-        notes: [input.notes, ...calculated.inconsistencies].filter(Boolean).join("\n")
+        notes: [input.notes, ...calculated.inconsistencies].filter(Boolean).join("\n"),
+        createdBy: this.safeUserId(user),
+        updatedBy: this.safeUserId(user)
       },
       include: { week: true, sector: true, product: true }
     });
 
-    await this.audit.record({ module: "production", action: "create", entity: "ProductionEntry", entityId: entry.id, after: entry });
+    await this.audit.record({ userId: this.safeUserId(user), module: "production", action: "create", entity: "ProductionEntry", entityId: entry.id, after: entry });
     return { ...entry, calculations: calculated };
   }
 
-  async duplicate(id: string) {
-    const current = await this.prisma.productionEntry.findUnique({ where: { id } });
+  async duplicate(id: string, user?: CurrentUser) {
+    const current = await this.prisma.productionEntry.findUnique({ where: { id }, include: { week: true, sector: true } });
     if (!current || current.deletedAt) throw new NotFoundException("Lancamento nao encontrado.");
+    if (current.week.status !== "OPEN" && current.week.status !== "REVIEW") {
+      throw new BadRequestException("Semana fechada ou arquivada nao permite duplicacao.");
+    }
+    const newOrderNumber = `${current.productionOrder}-COPIA`;
+    const order = await this.prisma.productionOrder.upsert({
+      where: {
+        weekId_orderNumber_productId: {
+          weekId: current.weekId,
+          orderNumber: newOrderNumber,
+          productId: current.productId
+        }
+      },
+      create: {
+        weekId: current.weekId,
+        productId: current.productId,
+        sectorCode: current.sector.code,
+        orderNumber: newOrderNumber
+      },
+      update: { status: "OPEN" }
+    });
     const duplicated = await this.prisma.productionEntry.create({
       data: {
-        ...current,
-        id: undefined,
-        productionOrder: `${current.productionOrder}-COPIA`,
-        createdAt: undefined,
-        updatedAt: undefined,
-        deletedAt: null
-      }
+        weekId: current.weekId,
+        sectorId: current.sectorId,
+        lineId: current.lineId,
+        productId: current.productId,
+        productionOrderId: order.id,
+        date: current.date,
+        productionOrder: newOrderNumber,
+        plannedBatches: current.plannedBatches,
+        realizedBatches: current.realizedBatches,
+        usedReworkKg: current.usedReworkKg,
+        packedBoxes: current.packedBoxes,
+        producedKg: current.producedKg,
+        weighingLossKg: current.weighingLossKg,
+        generatedReworkKg: current.generatedReworkKg,
+        expectedYieldKg: current.expectedYieldKg,
+        realYieldPercent: current.realYieldPercent,
+        massWeightKg: current.massWeightKg,
+        boxWeightKg: current.boxWeightKg,
+        targetPackageWeightG: current.targetPackageWeightG,
+        averagePackageWeightG: current.averagePackageWeightG,
+        overweightGPerPackage: current.overweightGPerPackage,
+        overweightTotalKg: current.overweightTotalKg,
+        overweightPercent: current.overweightPercent,
+        status: current.status,
+        notes: current.notes,
+        createdBy: this.safeUserId(user),
+        updatedBy: this.safeUserId(user)
+      },
+      include: { week: true, sector: true, product: true, order: true }
     });
-    await this.audit.record({ module: "production", action: "duplicate", entity: "ProductionEntry", entityId: duplicated.id, before: current, after: duplicated });
+    await this.audit.record({ userId: this.safeUserId(user), module: "production", action: "duplicate", entity: "ProductionEntry", entityId: duplicated.id, before: current, after: duplicated });
     return duplicated;
   }
 
-  async softDelete(id: string) {
-    const entry = await this.prisma.productionEntry.update({ where: { id }, data: { deletedAt: new Date() } });
-    await this.audit.record({ module: "production", action: "delete", entity: "ProductionEntry", entityId: id, after: entry });
+  async softDelete(id: string, user?: CurrentUser) {
+    const current = await this.prisma.productionEntry.findUnique({ where: { id }, include: { week: true } });
+    if (!current || current.deletedAt) throw new NotFoundException("Lancamento nao encontrado.");
+    if (current.week.status !== "OPEN" && current.week.status !== "REVIEW") {
+      throw new BadRequestException("Semana fechada ou arquivada nao permite exclusao.");
+    }
+    const entry = await this.prisma.productionEntry.update({
+      where: { id },
+      data: { deletedAt: new Date(), updatedBy: this.safeUserId(user) }
+    });
+    await this.audit.record({ userId: this.safeUserId(user), module: "production", action: "delete", entity: "ProductionEntry", entityId: id, before: current, after: entry });
     return entry;
+  }
+
+  private assertDateInsideWeek(date: Date, startsOn: Date, endsOn: Date) {
+    const target = dateOnly(date);
+    if (target < dateOnly(startsOn) || target > dateOnly(endsOn)) {
+      throw new BadRequestException("Data do lancamento precisa pertencer ao periodo da semana selecionada.");
+    }
+  }
+
+  private safeUserId(user?: CurrentUser) {
+    return user?.id && uuidPattern.test(user.id) ? user.id : undefined;
   }
 }

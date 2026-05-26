@@ -2,6 +2,9 @@ import { Injectable, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "../../infrastructure/database/prisma.service";
 import { productSchema } from "../../domain/validators/schemas";
 import { AuditService } from "../audit/audit.service";
+import { CurrentUser } from "../../infrastructure/security/current-user";
+
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 @Injectable()
 export class ProductsService {
@@ -27,9 +30,10 @@ export class ProductsService {
     });
   }
 
-  async create(payload: unknown) {
+  async create(payload: unknown, user?: CurrentUser) {
     const input = productSchema.parse(payload);
     const sector = await this.prisma.sector.findUniqueOrThrow({ where: { code: input.defaultSector } });
+    const userId = this.safeUserId(user);
     const product = await this.prisma.product.create({
       data: {
         code: input.code,
@@ -37,6 +41,8 @@ export class ProductsService {
         defaultSectorId: sector.id,
         unit: input.unit,
         notes: input.notes,
+        createdBy: userId,
+        updatedBy: userId,
         weightConfig: {
           create: {
             packageWeightKg: input.packageWeightKg,
@@ -52,14 +58,15 @@ export class ProductsService {
       include: { defaultSector: true, weightConfig: true }
     });
 
-    await this.audit.record({ module: "products", action: "create", entity: "Product", entityId: product.id, after: product });
+    await this.audit.record({ userId, module: "products", action: "create", entity: "Product", entityId: product.id, after: product });
     return product;
   }
 
-  async update(id: string, payload: unknown) {
+  async update(id: string, payload: unknown, user?: CurrentUser) {
     const input = productSchema.partial().parse(payload);
     const current = await this.prisma.product.findUnique({ where: { id }, include: { weightConfig: true } });
     if (!current) throw new NotFoundException("Produto nao encontrado.");
+    const userId = this.safeUserId(user);
 
     const sector = input.defaultSector
       ? await this.prisma.sector.findUniqueOrThrow({ where: { code: input.defaultSector } })
@@ -73,6 +80,7 @@ export class ProductsService {
         defaultSectorId: sector?.id,
         unit: input.unit,
         notes: input.notes,
+        updatedBy: userId,
         weightConfig: input.boxWeightKg
           ? {
               upsert: {
@@ -101,17 +109,24 @@ export class ProductsService {
       include: { defaultSector: true, weightConfig: true }
     });
 
-    await this.audit.record({ module: "products", action: "update", entity: "Product", entityId: id, before: current, after: product });
+    await this.audit.record({ userId, module: "products", action: "update", entity: "Product", entityId: id, before: current, after: product });
     return product;
   }
 
-  async deactivate(id: string) {
+  async deactivate(id: string, user?: CurrentUser) {
+    const current = await this.prisma.product.findUnique({ where: { id }, include: { weightConfig: true } });
+    if (!current) throw new NotFoundException("Produto nao encontrado.");
+    const userId = this.safeUserId(user);
     const product = await this.prisma.product.update({
       where: { id },
-      data: { active: false },
+      data: { active: false, updatedBy: userId },
       include: { defaultSector: true, weightConfig: true }
     });
-    await this.audit.record({ module: "products", action: "deactivate", entity: "Product", entityId: id, after: product });
+    await this.audit.record({ userId, module: "products", action: "deactivate", entity: "Product", entityId: id, before: current, after: product });
     return product;
+  }
+
+  private safeUserId(user?: CurrentUser) {
+    return user?.id && uuidPattern.test(user.id) ? user.id : undefined;
   }
 }

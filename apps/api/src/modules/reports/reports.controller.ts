@@ -1,4 +1,6 @@
 import { Controller, Get, Query } from "@nestjs/common";
+import { CurrentUser } from "../../infrastructure/security/current-user";
+import { CurrentUserData } from "../auth/current-user.decorator";
 import { Roles } from "../auth/roles.decorator";
 import { ReportsService } from "./reports.service";
 
@@ -8,7 +10,7 @@ export class ReportsController {
   constructor(private readonly reports: ReportsService) {}
 
   @Get("weekly-production")
-  weeklyProduction(@Query("weekId") weekId?: string) {
-    return this.reports.weeklyProduction(weekId);
+  weeklyProduction(@Query("weekId") weekId: string | undefined, @CurrentUserData() user?: CurrentUser) {
+    return this.reports.weeklyProduction(weekId, user);
   }
 }

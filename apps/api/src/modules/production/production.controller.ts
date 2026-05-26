@@ -1,5 +1,7 @@
 import { Body, Controller, Delete, Get, Param, Post, Query } from "@nestjs/common";
-import { Public } from "../auth/public.decorator";
+import { Throttle } from "@nestjs/throttler";
+import { CurrentUser } from "../../infrastructure/security/current-user";
+import { CurrentUserData } from "../auth/current-user.decorator";
 import { Roles } from "../auth/roles.decorator";
 import { ProductionService } from "./production.service";
 
@@ -25,7 +27,8 @@ export class ProductionController {
     return this.production.list({ ...query, sector: "P2" });
   }
 
-  @Public()
+  @Throttle({ default: { limit: 30, ttl: 60_000 } })
+  @Roles("ADMIN", "MANAGER", "SUPERVISOR", "OPERATOR")
   @Post("preview")
   preview(@Body() body: unknown) {
     return this.production.preview(body);
@@ -33,19 +36,19 @@ export class ProductionController {
 
   @Roles("ADMIN", "SUPERVISOR", "OPERATOR")
   @Post()
-  create(@Body() body: unknown) {
-    return this.production.create(body);
+  create(@Body() body: unknown, @CurrentUserData() user?: CurrentUser) {
+    return this.production.create(body, user);
   }
 
   @Roles("ADMIN", "SUPERVISOR", "OPERATOR")
   @Post(":id/duplicate")
-  duplicate(@Param("id") id: string) {
-    return this.production.duplicate(id);
+  duplicate(@Param("id") id: string, @CurrentUserData() user?: CurrentUser) {
+    return this.production.duplicate(id, user);
   }
 
   @Roles("ADMIN", "SUPERVISOR")
   @Delete(":id")
-  softDelete(@Param("id") id: string) {
-    return this.production.softDelete(id);
+  softDelete(@Param("id") id: string, @CurrentUserData() user?: CurrentUser) {
+    return this.production.softDelete(id, user);
   }
 }

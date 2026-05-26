@@ -15,8 +15,10 @@ RUN npm run build --workspace=@nexus/api
 FROM node:22-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
+RUN apk add --no-cache python3
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/apps/api/dist ./apps/api/dist
 COPY --from=builder /app/prisma ./prisma
+COPY --from=builder /app/scripts ./scripts
 EXPOSE 3333
 CMD ["node", "apps/api/dist/main.js"]
