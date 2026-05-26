@@ -74,7 +74,10 @@ async function main() {
     });
   }
 
-  const adminPassword = process.env.INITIAL_ADMIN_PASSWORD ?? "ChangeMe!2026";
+  const adminPassword = process.env.INITIAL_ADMIN_PASSWORD;
+  if (!adminPassword) {
+    throw new Error("INITIAL_ADMIN_PASSWORD must be set before running prisma:seed.");
+  }
   const admin = await prisma.user.upsert({
     where: { email: process.env.INITIAL_ADMIN_EMAIL ?? "admin@nexus.local" },
     create: {

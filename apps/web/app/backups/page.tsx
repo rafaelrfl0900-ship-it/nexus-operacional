@@ -30,18 +30,6 @@ interface BackupListResponse {
   };
 }
 
-const fallbackBackups: BackupRow[] = [
-  {
-    id: "preview-1",
-    fileName: "nexus-backup-preview.json",
-    filePath: "./backups/nexus-backup-preview.json",
-    status: "COMPLETED",
-    sizeBytes: "245760",
-    checksum: "preview",
-    createdAt: new Date().toISOString()
-  }
-];
-
 function formatBytes(value: string | null) {
   const bytes = Number(value ?? 0);
   if (!Number.isFinite(bytes) || bytes <= 0) return "-";
@@ -58,14 +46,14 @@ function shortChecksum(value?: string | null) {
 
 export default function BackupsPage() {
   const token = useMemo(() => getSession()?.accessToken, []);
-  const [backups, setBackups] = useState<BackupRow[]>(fallbackBackups);
+  const [backups, setBackups] = useState<BackupRow[]>([]);
   const [summary, setSummary] = useState<BackupListResponse["summary"]>({
-    total: 1,
-    completed: 1,
+    total: 0,
+    completed: 0,
     failed: 0,
     running: 0,
-    storageBytes: "245760",
-    latestCreatedAt: fallbackBackups[0].createdAt
+    storageBytes: "0",
+    latestCreatedAt: null
   });
   const [message, setMessage] = useState("Aguardando login para carregar backups reais.");
   const [loading, setLoading] = useState(false);
@@ -75,11 +63,13 @@ export default function BackupsPage() {
     setLoading(true);
     try {
       const data = await apiGetClient<BackupListResponse>("/backups?take=50", token);
-      setBackups(data.items.length ? data.items : fallbackBackups);
+      setBackups(data.items);
       setSummary(data.summary);
       setMessage(`${data.summary.total} backup(s) registrado(s) no banco.`);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Backups demonstrativos em uso.");
+      setBackups([]);
+      setSummary({ total: 0, completed: 0, failed: 0, running: 0, storageBytes: "0", latestCreatedAt: null });
+      setMessage(error instanceof Error ? error.message : "Nao foi possivel carregar backups da API.");
     } finally {
       setLoading(false);
     }

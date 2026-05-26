@@ -1,39 +1,42 @@
-import { legacyData, legacyDowntimeEntries, legacyOverweightRanking, legacyProductivitySummary } from "@/lib/legacy-data";
+const demoMode = process.env.NEXT_PUBLIC_DEMO_MODE === "true";
 
-const dayLabels = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sab"];
+export const kpis = demoMode
+  ? [
+      { label: "Producao total", value: 18420, suffix: "kg", status: "OK" },
+      { label: "Perdas totais", value: 42, suffix: "kg", status: "OK" },
+      { label: "Sobrepeso total", value: 28, suffix: "kg", status: "OK" },
+      { label: "Sobrepeso medio", value: 0.012, suffix: "%", status: "OK" },
+      { label: "Rendimento medio", value: 0.972, suffix: "%", status: "OK" },
+      { label: "Tempo parado", value: 64, suffix: "min", status: "MEDIUM" }
+    ]
+  : [
+      { label: "Producao total", value: 0, suffix: "kg", status: "OK" },
+      { label: "Perdas totais", value: 0, suffix: "kg", status: "OK" },
+      { label: "Sobrepeso total", value: 0, suffix: "kg", status: "OK" },
+      { label: "Sobrepeso medio", value: 0, suffix: "%", status: "OK" },
+      { label: "Rendimento medio", value: 0, suffix: "%", status: "OK" },
+      { label: "Tempo parado", value: 0, suffix: "min", status: "OK" }
+    ];
 
-export const kpis = [
-  { label: "Producao total", value: legacyData.dashboard.producedKg, suffix: "kg", status: "OK" },
-  { label: "Perdas totais", value: legacyData.dashboard.lossesKg, suffix: "kg", status: legacyData.dashboard.lossesKg > 50 ? "ATTENTION" : "OK" },
-  { label: "Sobrepeso total", value: legacyData.dashboard.overweightKg, suffix: "kg", status: legacyData.dashboard.overweightKg > 100 ? "ATTENTION" : "OK" },
-  { label: "Sobrepeso medio", value: legacyData.dashboard.overweightPercent, suffix: "%", status: legacyData.dashboard.overweightPercent > 0.02 ? "ATTENTION" : "OK" },
-  { label: "Rendimento medio", value: legacyData.dashboard.averageYield, suffix: "%", status: legacyData.dashboard.averageYield >= 0.95 ? "OK" : "ATTENTION" },
-  { label: "Tempo parado", value: legacyData.dashboard.downtimeMinutes, suffix: "min", status: legacyData.dashboard.downtimeMinutes > 120 ? "MEDIUM" : "OK" }
-];
+export const productionByDay = demoMode
+  ? [
+      { day: "Seg", p1: 4200, p2: 1200, losses: 8, overweight: 5, yield: 0.97 },
+      { day: "Ter", p1: 3900, p2: 1400, losses: 7, overweight: 6, yield: 0.98 },
+      { day: "Qua", p1: 4100, p2: 1300, losses: 9, overweight: 7, yield: 0.96 }
+    ]
+  : [];
 
-export const productionByDay = legacyProductivitySummary.daily.slice(0, 7).map((row) => ({
-  day: dayLabels[new Date(`${row.date}T00:00:00`).getDay()] ?? row.date.slice(5),
-  p1: row.producedKg,
-  p2: 0,
-  losses: legacyData.dashboard.lossesKg / Math.max(legacyProductivitySummary.daily.length, 1),
-  overweight: legacyData.dashboard.overweightKg / Math.max(legacyProductivitySummary.daily.length, 1),
-  yield: row.averageYield
-}));
+export const downtimeByReason = demoMode
+  ? [
+      { reason: "Aguardando massa", minutes: 28 },
+      { reason: "Setup", minutes: 21 },
+      { reason: "Limpeza", minutes: 15 }
+    ]
+  : [];
 
-const downtimeTotals = legacyDowntimeEntries.reduce<Record<string, number>>((acc, entry) => {
-  const reason = entry.reason?.name ?? "Sem motivo";
-  acc[reason] = (acc[reason] ?? 0) + Number(entry.stoppedMinutes ?? 0);
-  return acc;
-}, {});
-
-export const downtimeByReason = Object.entries(downtimeTotals)
-  .map(([reason, minutes]) => ({ reason, minutes }))
-  .sort((a, b) => b.minutes - a.minutes)
-  .slice(0, 8);
-
-export const topProducts = legacyOverweightRanking.slice(0, 8).map((row) => ({
-  code: row.code,
-  name: row.product,
-  producedKg: row.producedKg,
-  overweightKg: row.overweightKg
-}));
+export const topProducts = demoMode
+  ? [
+      { code: "DEMO-001", name: "Produto demonstrativo A", producedKg: 6400, overweightKg: 11 },
+      { code: "DEMO-002", name: "Produto demonstrativo B", producedKg: 5100, overweightKg: 9 }
+    ]
+  : [];

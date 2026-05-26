@@ -443,9 +443,9 @@ def build_web_data(path: Path) -> dict[str, Any]:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Export legacy Excel data for the static web fallback.")
+    parser = argparse.ArgumentParser(description="Export legacy Excel data for private backend migration analysis.")
     parser.add_argument("--file", type=Path, default=None)
-    parser.add_argument("--out", type=Path, default=Path("apps/web/lib/legacy-data.json"))
+    parser.add_argument("--out", type=Path, default=Path("data/private/legacy-data.json"))
     args = parser.parse_args()
 
     path = args.file or find_default_workbook()

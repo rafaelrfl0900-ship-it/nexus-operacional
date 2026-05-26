@@ -1,15 +1,16 @@
 "use client";
 
 import { Factory } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { apiPostClient, createLocalAdminSession, isNetworkAuthError, saveSession, SessionData } from "@/services/api";
+import { apiPostClient, saveSession, SessionData } from "@/services/api";
 
 export default function LoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState("admin@nexus.local");
+  const searchParams = useSearchParams();
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -19,29 +20,12 @@ export default function LoginPage() {
     setLoading(true);
     setError(null);
 
-    const localSession = createLocalAdminSession(email, password);
-    if (localSession) {
-      saveSession(localSession);
-      router.push("/dashboard");
-      router.refresh();
-      setLoading(false);
-      return;
-    }
-
     try {
       const session = await apiPostClient<SessionData>("/auth/login", { email, password });
       saveSession(session);
-      router.push("/dashboard");
+      router.push(searchParams.get("next") || "/dashboard");
       router.refresh();
     } catch (caught) {
-      const localSession = isNetworkAuthError(caught) ? createLocalAdminSession(email, password) : null;
-      if (localSession) {
-        saveSession(localSession);
-        router.push("/dashboard");
-        router.refresh();
-        return;
-      }
-
       setError(caught instanceof Error ? caught.message : "Nao foi possivel iniciar a sessao.");
     } finally {
       setLoading(false);

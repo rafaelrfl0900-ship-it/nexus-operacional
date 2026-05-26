@@ -1,5 +1,8 @@
 export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3333/api";
 
+const sessionStorageKey = "nexus-session-user";
+const cookieSessionMarker = "cookie-session";
+
 export interface SessionUser {
   id: string;
   email: string;
@@ -12,41 +15,23 @@ export interface SessionData {
   user: SessionUser;
 }
 
-const localAdminEmail = process.env.NEXT_PUBLIC_LOCAL_ADMIN_EMAIL ?? "admin@nexus.local";
-const localAdminPassword = process.env.NEXT_PUBLIC_LOCAL_ADMIN_PASSWORD ?? "ChangeMe!2026";
-const localAdminName = process.env.NEXT_PUBLIC_LOCAL_ADMIN_NAME ?? "Administrador Nexus";
-const localAdminDefaultEnabled = /^https?:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/.test(API_URL);
-const localAdminEnabled = (process.env.NEXT_PUBLIC_ENABLE_LOCAL_ADMIN ?? String(localAdminDefaultEnabled)) === "true";
-const localAdminToken = "local-admin-session";
+let currentSession: SessionData | null = null;
 
-export function createLocalAdminSession(email: string, password: string): SessionData | null {
-  if (!localAdminEnabled) return null;
-  if (email.trim().toLowerCase() !== localAdminEmail.toLowerCase() || password !== localAdminPassword) return null;
-
-  return {
-    accessToken: localAdminToken,
-    user: {
-      id: "local-admin",
-      email: localAdminEmail,
-      name: localAdminName,
-      roles: ["ADMIN"]
-    }
-  };
+async function parseError(response: Response, fallback: string) {
+  const body = await response.json().catch(() => null);
+  return typeof body?.message === "string" ? body.message : fallback;
 }
 
-export function isLocalAdminSessionToken(token?: string) {
-  return token === localAdminToken;
-}
-
-export function isNetworkAuthError(error: unknown) {
-  if (error instanceof TypeError) return true;
-  if (!(error instanceof Error)) return false;
-  return /failed to fetch|network|load failed|fetch/i.test(error.message);
+function authHeaders(token?: string): Record<string, string> {
+  if (!token || token === cookieSessionMarker) return {};
+  return { Authorization: `Bearer ${token}` };
 }
 
 export async function apiGet<T>(path: string, fallback: T): Promise<T> {
   try {
-    const response = await fetch(`${API_URL}${path}`, { next: { revalidate: 30 } });
+    const response = await fetch(`${API_URL}${path}`, {
+      credentials: "include"
+    });
     if (!response.ok) return fallback;
     return (await response.json()) as T;
   } catch {
@@ -58,6 +43,7 @@ export async function apiPost<T>(path: string, payload: unknown, fallback: T): P
   try {
     const response = await fetch(`${API_URL}${path}`, {
       method: "POST",
+      credentials: "include",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload)
     });
@@ -69,110 +55,106 @@ export async function apiPost<T>(path: string, payload: unknown, fallback: T): P
 }
 
 export async function apiPostClient<T>(path: string, payload: unknown, token?: string): Promise<T> {
-  if (isLocalAdminSessionToken(token)) {
-    throw new Error("API real indisponivel; usando dados da planilha local.");
-  }
-
   const response = await fetch(`${API_URL}${path}`, {
     method: "POST",
+    credentials: "include",
     headers: {
       "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {})
+      ...authHeaders(token)
     },
     body: JSON.stringify(payload)
   });
 
   if (!response.ok) {
-    const body = await response.json().catch(() => null);
-    const message = typeof body?.message === "string" ? body.message : "Nao foi possivel concluir a operacao.";
-    throw new Error(message);
+    if (response.status === 401) clearSession();
+    throw new Error(await parseError(response, "Nao foi possivel concluir a operacao."));
   }
 
   return (await response.json()) as T;
 }
 
 export async function apiGetClient<T>(path: string, token?: string): Promise<T> {
-  if (isLocalAdminSessionToken(token)) {
-    throw new Error("API real indisponivel; usando dados da planilha local.");
-  }
-
   const response = await fetch(`${API_URL}${path}`, {
-    headers: {
-      ...(token ? { Authorization: `Bearer ${token}` } : {})
-    }
+    credentials: "include",
+    headers: authHeaders(token)
   });
 
   if (!response.ok) {
-    const body = await response.json().catch(() => null);
-    const message = typeof body?.message === "string" ? body.message : "Nao foi possivel carregar os dados.";
-    throw new Error(message);
+    if (response.status === 401) clearSession();
+    throw new Error(await parseError(response, "Nao foi possivel carregar os dados."));
   }
 
   return (await response.json()) as T;
 }
 
 export async function apiPatchClient<T>(path: string, payload: unknown, token?: string): Promise<T> {
-  if (isLocalAdminSessionToken(token)) {
-    throw new Error("API real indisponivel; usando dados da planilha local.");
-  }
-
   const response = await fetch(`${API_URL}${path}`, {
     method: "PATCH",
+    credentials: "include",
     headers: {
       "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {})
+      ...authHeaders(token)
     },
     body: JSON.stringify(payload)
   });
 
   if (!response.ok) {
-    const body = await response.json().catch(() => null);
-    const message = typeof body?.message === "string" ? body.message : "Nao foi possivel atualizar o registro.";
-    throw new Error(message);
+    if (response.status === 401) clearSession();
+    throw new Error(await parseError(response, "Nao foi possivel atualizar o registro."));
   }
 
   return (await response.json()) as T;
 }
 
 export async function apiDeleteClient<T>(path: string, token?: string): Promise<T> {
-  if (isLocalAdminSessionToken(token)) {
-    throw new Error("API real indisponivel; usando dados da planilha local.");
-  }
-
   const response = await fetch(`${API_URL}${path}`, {
     method: "DELETE",
-    headers: {
-      ...(token ? { Authorization: `Bearer ${token}` } : {})
-    }
+    credentials: "include",
+    headers: authHeaders(token)
   });
 
   if (!response.ok) {
-    const body = await response.json().catch(() => null);
-    const message = typeof body?.message === "string" ? body.message : "Nao foi possivel remover o registro.";
-    throw new Error(message);
+    if (response.status === 401) clearSession();
+    throw new Error(await parseError(response, "Nao foi possivel remover o registro."));
   }
 
   return (await response.json()) as T;
 }
 
+export async function fetchCurrentSession() {
+  const session = await apiGetClient<SessionData>("/auth/me");
+  saveSession(session);
+  return session;
+}
+
+export async function logoutSession() {
+  await apiPostClient<{ ok: boolean }>("/auth/logout", {});
+  clearSession();
+}
+
 export function saveSession(session: SessionData) {
+  currentSession = { accessToken: cookieSessionMarker, user: session.user };
   if (typeof window === "undefined") return;
-  window.localStorage.setItem("nexus-session", JSON.stringify(session));
+  window.sessionStorage.setItem(sessionStorageKey, JSON.stringify(session.user));
 }
 
 export function getSession(): SessionData | null {
+  if (currentSession) return currentSession;
   if (typeof window === "undefined") return null;
-  const raw = window.localStorage.getItem("nexus-session");
+  const raw = window.sessionStorage.getItem(sessionStorageKey);
   if (!raw) return null;
   try {
-    return JSON.parse(raw) as SessionData;
+    const user = JSON.parse(raw) as SessionUser;
+    currentSession = { accessToken: cookieSessionMarker, user };
+    return currentSession;
   } catch {
-    window.localStorage.removeItem("nexus-session");
+    window.sessionStorage.removeItem(sessionStorageKey);
     return null;
   }
 }
 
 export function clearSession() {
+  currentSession = null;
   if (typeof window === "undefined") return;
-  window.localStorage.removeItem("nexus-session");
+  window.sessionStorage.removeItem(sessionStorageKey);
 }

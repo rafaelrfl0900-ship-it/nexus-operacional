@@ -6,7 +6,6 @@ import { PageHeader } from "@/components/layout/page-header";
 import { DataTable } from "@/components/tables/data-table";
 import { Button } from "@/components/ui/button";
 import { Card, StatCard } from "@/components/ui/card";
-import { legacyData } from "@/lib/legacy-data";
 import { apiGetClient, apiPostClient, getSession } from "@/services/api";
 
 interface ImportPreview {
@@ -33,14 +32,14 @@ interface ImportBatch {
 }
 
 const fallbackPreview: ImportPreview = {
-  source: legacyData.source,
-  sheetCount: legacyData.sheetCount,
-  formulaCount: legacyData.formulaCount,
-  errors: legacyData.errors,
+  source: "API nao carregada",
+  sheetCount: 0,
+  formulaCount: 0,
+  errors: {},
   legacyData: {
-    productCount: legacyData.products.length,
+    productCount: 0,
     duplicateWeightCodes: [],
-    importErrorCount: legacyData.importErrors.length
+    importErrorCount: 0
   }
 };
 
@@ -58,7 +57,7 @@ export default function ImportPage() {
         setPreview(data);
         setMessage("Preview carregado da API.");
       })
-      .catch((error) => setMessage(error instanceof Error ? error.message : "Preview local em uso."));
+      .catch((error) => setMessage(error instanceof Error ? error.message : "Nao foi possivel carregar preview da API."));
   }, [token]);
 
   async function runImport() {
@@ -87,11 +86,7 @@ export default function ImportPage() {
         Celula: error.cell ?? "-",
         Erro: error.message
       }))
-    : legacyData.importErrors.slice(0, 100).map((error) => ({
-        Aba: error.sheetName ?? "-",
-        Celula: error.cell ?? "-",
-        Erro: error.message
-      }));
+    : [];
 
   return (
     <div className="space-y-6">

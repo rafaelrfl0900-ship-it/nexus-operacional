@@ -2,11 +2,13 @@
 
 ## API security
 
-- `JwtAuthGuard` is registered globally and requires `Authorization: Bearer <token>` on protected routes.
+- `JwtAuthGuard` is registered globally and accepts the HTTP-only `nexus_session` cookie on protected routes. Bearer tokens are still accepted for administrative/API tooling.
+- The frontend must not store sensitive tokens in `localStorage`; authenticated browser calls use `credentials: "include"`.
 - `@Public()` is restricted to login/logout, health check and the stateless production calculation preview.
 - `RolesGuard` reads `@Roles(...)` metadata and blocks users outside the allowed role set.
 - `ADMIN` can access every role-protected route by policy.
 - Human API errors are returned for missing, invalid or expired sessions.
+- Workbook-derived JSON must not be written to `apps/web`. Private migration exports go under `data/private` or another backend-only location.
 
 ## Workbook import
 

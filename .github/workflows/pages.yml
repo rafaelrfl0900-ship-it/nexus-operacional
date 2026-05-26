@@ -1,9 +1,7 @@
-name: Deploy frontend to GitHub Pages
+name: Deploy demo frontend to GitHub Pages
 
 on:
-  push:
-    branches:
-      - main
+  workflow_dispatch:
 
 jobs:
   pages:
@@ -43,6 +41,8 @@ jobs:
       - name: Build frontend
         working-directory: apps/web
         run: npm run build
+        env:
+          NEXT_PUBLIC_DEMO_MODE: "true"
 
       - name: Add Pages nojekyll marker
         run: touch apps/web/out/.nojekyll

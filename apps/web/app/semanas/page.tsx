@@ -7,7 +7,6 @@ import { DataTable } from "@/components/tables/data-table";
 import { Button } from "@/components/ui/button";
 import { Card, StatCard } from "@/components/ui/card";
 import { apiGetClient, apiPatchClient, apiPostClient, getSession } from "@/services/api";
-import { legacyWeeks } from "@/lib/legacy-data";
 
 interface WeekRow {
   id: string;
@@ -19,8 +18,6 @@ interface WeekRow {
   endsOn: string;
   status: "OPEN" | "REVIEW" | "CLOSED" | "ARCHIVED";
 }
-
-const fallbackWeeks = legacyWeeks as WeekRow[];
 
 function toIsoDate(date: Date) {
   return date.toISOString().slice(0, 10);
@@ -43,8 +40,8 @@ function currentWeekPayload() {
 }
 
 export default function WeeksPage() {
-  const [weeks, setWeeks] = useState<WeekRow[]>(fallbackWeeks);
-  const [message, setMessage] = useState(`${fallbackWeeks.length} semana(s) carregada(s) da planilha local.`);
+  const [weeks, setWeeks] = useState<WeekRow[]>([]);
+  const [message, setMessage] = useState("Carregando semanas da API.");
   const [loading, setLoading] = useState(false);
   const token = useMemo(() => getSession()?.accessToken, []);
 
@@ -56,8 +53,8 @@ export default function WeeksPage() {
       setWeeks(data);
       setMessage(`${data.length} semana(s) carregada(s) da API.`);
     } catch (error) {
-      setWeeks(fallbackWeeks);
-      setMessage(error instanceof Error ? `${error.message} Semanas da planilha local em uso.` : "Semanas da planilha local em uso.");
+      setWeeks([]);
+      setMessage(error instanceof Error ? error.message : "Nao foi possivel carregar semanas da API.");
     } finally {
       setLoading(false);
     }
@@ -84,8 +81,8 @@ export default function WeeksPage() {
   }
 
   async function changeStatus(id: string, action: "close" | "reopen" | "archive") {
-    if (!token || id.startsWith("legacy-")) {
-      setMessage("Entre no sistema e carregue semanas reais para alterar status.");
+    if (!token) {
+      setMessage("Entre no sistema para alterar status de semanas.");
       return;
     }
     setLoading(true);

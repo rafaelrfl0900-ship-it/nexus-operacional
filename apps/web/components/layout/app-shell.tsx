@@ -4,22 +4,52 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Factory, LogOut, Search, UserCircle2 } from "lucide-react";
-import { navigation } from "@/lib/navigation";
+import { navigation, NavigationRole } from "@/lib/navigation";
 import { cn } from "@/lib/format";
-import { clearSession, getSession, SessionUser } from "@/services/api";
+import { fetchCurrentSession, getSession, logoutSession, SessionUser } from "@/services/api";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const isLogin = pathname === "/login";
   const [user, setUser] = useState<SessionUser | null>(null);
+  const [checkingSession, setCheckingSession] = useState(!isLogin);
+  const visibleNavigation = navigation.filter((item) => user?.roles.some((role) => item.roles.includes(role as NavigationRole)));
 
   useEffect(() => {
-    setUser(getSession()?.user ?? null);
-  }, [pathname]);
+    let active = true;
 
-  function logout() {
-    clearSession();
+    async function verifySession() {
+      if (isLogin) {
+        setCheckingSession(false);
+        setUser(null);
+        return;
+      }
+
+      setCheckingSession(true);
+      try {
+        const session = await fetchCurrentSession();
+        if (!active) return;
+        setUser(session.user);
+      } catch {
+        if (!active) return;
+        setUser(null);
+        router.replace(`/login?next=${encodeURIComponent(pathname)}`);
+      } finally {
+        if (active) setCheckingSession(false);
+      }
+    }
+
+    setUser(getSession()?.user ?? null);
+    verifySession();
+
+    return () => {
+      active = false;
+    };
+  }, [isLogin, pathname, router]);
+
+  async function logout() {
+    await logoutSession().catch(() => undefined);
     setUser(null);
     router.push("/login");
     router.refresh();
@@ -27,6 +57,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   if (isLogin) {
     return <main>{children}</main>;
+  }
+
+  if (checkingSession) {
+    return (
+      <main className="grid min-h-screen place-items-center bg-[#070b12] px-4 text-sm text-slate-300">
+        Validando sessao...
+      </main>
+    );
+  }
+
+  if (!user) {
+    return null;
   }
 
   return (
@@ -42,7 +84,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         </Link>
         <nav className="nexus-scrollbar flex max-h-[calc(100vh-120px)] flex-col gap-1 overflow-y-auto pr-1">
-          {navigation.map((item) => {
+          {visibleNavigation.map((item) => {
             const Icon = item.icon;
             const active = pathname === item.href;
             return (

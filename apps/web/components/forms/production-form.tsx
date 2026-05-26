@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { Card, StatusBadge } from "@/components/ui/card";
 import { DataTable } from "@/components/tables/data-table";
 import { formatKg, formatPercent } from "@/lib/format";
-import { legacyProductionEntries, legacyProducts, legacyWeeks, preferredLegacyWeekId } from "@/lib/legacy-data";
 import { apiGetClient, apiPostClient, getSession } from "@/services/api";
 
 interface FormState {
@@ -95,24 +94,21 @@ function productWeightConfig(product: ProductRow | undefined, sector: "P1" | "P2
 }
 
 export function ProductionForm({ sector }: { sector: "P1" | "P2" }) {
-  const fallbackProducts = useMemo(() => legacyProducts.filter((product) => product.defaultSector?.code === sector || !product.defaultSector), [sector]);
-  const fallbackWeekId = preferredLegacyWeekId();
-  const fallbackEntries = useMemo(() => legacyProductionEntries.filter((entry) => entry.sector === sector && entry.weekId === fallbackWeekId), [fallbackWeekId, sector]);
   const [state, setState] = useState<FormState>({
-    productionOrder: "23329",
-    plannedBatches: sector === "P1" ? 31 : 100,
-    realizedBatches: sector === "P1" ? 31 : 101,
-    packedBoxes: sector === "P1" ? 1318 : 50,
-    averagePackageWeightG: sector === "P1" ? 1009 : 1000
+    productionOrder: "",
+    plannedBatches: 0,
+    realizedBatches: 0,
+    packedBoxes: 0,
+    averagePackageWeightG: 0
   });
   const [date, setDate] = useState(today());
-  const [products, setProducts] = useState<ProductRow[]>(fallbackProducts);
-  const [weeks, setWeeks] = useState<WeekRow[]>(legacyWeeks);
-  const [productId, setProductId] = useState(fallbackProducts[0]?.id ?? "");
-  const [weekId, setWeekId] = useState(fallbackWeekId);
-  const [entries, setEntries] = useState<EntryRow[]>(fallbackEntries);
+  const [products, setProducts] = useState<ProductRow[]>([]);
+  const [weeks, setWeeks] = useState<WeekRow[]>([]);
+  const [productId, setProductId] = useState("");
+  const [weekId, setWeekId] = useState("");
+  const [entries, setEntries] = useState<EntryRow[]>([]);
   const [serverPreview, setServerPreview] = useState<PreviewState | null>(null);
-  const [message, setMessage] = useState(`${fallbackProducts.length} produto(s), ${legacyWeeks.length} semana(s) e ${fallbackEntries.length} lancamento(s) carregados da planilha local.`);
+  const [message, setMessage] = useState("Carregando produtos, semanas e lancamentos da API.");
   const [loading, setLoading] = useState(false);
   const token = useMemo(() => getSession()?.accessToken, []);
 
@@ -155,11 +151,11 @@ export function ProductionForm({ sector }: { sector: "P1" | "P2" }) {
       setWeekId((current) => current || weekRows.find((week) => week.status !== "CLOSED" && week.status !== "ARCHIVED")?.id || weekRows[0]?.id || "");
       setMessage("Produtos e semanas carregados da API.");
     } catch (error) {
-      setProducts(fallbackProducts);
-      setWeeks(legacyWeeks);
-      setProductId((current) => current || fallbackProducts[0]?.id || "");
-      setWeekId((current) => current || fallbackWeekId);
-      setMessage(error instanceof Error ? `${error.message} Referencias da planilha local em uso.` : "Referencias da planilha local em uso.");
+      setProducts([]);
+      setWeeks([]);
+      setProductId("");
+      setWeekId("");
+      setMessage(error instanceof Error ? error.message : "Nao foi possivel carregar referencias da API.");
     } finally {
       setLoading(false);
     }
@@ -168,15 +164,16 @@ export function ProductionForm({ sector }: { sector: "P1" | "P2" }) {
   async function loadEntries(nextWeekId = weekId) {
     if (!nextWeekId) return;
     if (!token) {
-      setEntries(legacyProductionEntries.filter((entry) => entry.sector === sector && entry.weekId === nextWeekId));
+      setEntries([]);
       return;
     }
     try {
       const query = new URLSearchParams({ sector, weekId: nextWeekId });
       const data = await apiGetClient<EntryRow[]>(`/production?${query.toString()}`, token);
       setEntries(data);
-    } catch {
-      setEntries(legacyProductionEntries.filter((entry) => entry.sector === sector && entry.weekId === nextWeekId));
+    } catch (error) {
+      setEntries([]);
+      setMessage(error instanceof Error ? error.message : "Nao foi possivel carregar lancamentos da API.");
     }
   }
 
@@ -211,7 +208,7 @@ export function ProductionForm({ sector }: { sector: "P1" | "P2" }) {
       setMessage("Calculo validado pela API de dominio.");
     } catch (caught) {
       setServerPreview(null);
-      setMessage(caught instanceof Error ? caught.message : "API indisponivel; previa local preservada.");
+      setMessage(caught instanceof Error ? caught.message : "Nao foi possivel validar o calculo na API.");
     } finally {
       setLoading(false);
     }

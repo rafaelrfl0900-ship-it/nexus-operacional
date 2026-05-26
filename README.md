@@ -66,20 +66,20 @@ docker compose exec api npm run prisma:seed
 
 If you need a lightweight production deployment on the same host, you can keep using the same `docker-compose.yml` with the production values in `.env`.
 
-## Public deployment
+## Public demo deployment
 
-The repository now includes a GitHub Actions workflow that builds the frontend statically on every push to `main`.
+The repository includes a manual GitHub Actions workflow for a static public demo only. It must not be used as the operational deployment for real company data.
 
-- Frontend build: `npm run build --workspace=@nexus/web`
+- Frontend build: `NEXT_PUBLIC_DEMO_MODE=true npm run build --workspace=@nexus/web`
 - Pages artifact: `apps/web/out`
 
-When GitHub Pages is enabled for this repository, the frontend will be published at:
+When the manual workflow is approved and GitHub Pages is enabled for this repository, the demo frontend will be published at:
 
 ```text
 https://rafaelrfl0900-ship-it.github.io/nexus-operacional/
 ```
 
-> Note: this GitHub Pages deployment publishes the frontend only. The full API/backend still needs a public host or Docker Compose server deployment.
+> Note: this GitHub Pages deployment publishes the frontend only and cannot be used for the real authenticated operation.
 
 For a full production deployment with API + PostgreSQL, host the repository on a server or a managed platform such as Render, Railway or a VPS, then use the current `docker-compose.yml` and `.env` values.
 
@@ -93,10 +93,10 @@ See `docs/production-deploy.md` for a step-by-step production deployment guide.
 
 ## Initial admin
 
-- Email: `admin@nexus.local`
-- Password: `ChangeMe!2026`
+- Email: value from `INITIAL_ADMIN_EMAIL`
+- Password: value from `INITIAL_ADMIN_PASSWORD`
 
-Change the password before real company use.
+Set a temporary strong password in `.env` before running `npm.cmd run prisma:seed`, then change it before real company use.
 
 ## Legacy workbook import
 

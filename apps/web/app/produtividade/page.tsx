@@ -7,7 +7,6 @@ import { DataTable } from "@/components/tables/data-table";
 import { Button } from "@/components/ui/button";
 import { Card, StatCard } from "@/components/ui/card";
 import { formatKg, formatPercent } from "@/lib/format";
-import { legacyProductivitySummary, legacyWeeks, preferredLegacyWeekId } from "@/lib/legacy-data";
 import { apiGetClient, getSession } from "@/services/api";
 
 interface WeekRow {
@@ -31,13 +30,20 @@ interface ProductivitySummary {
   daily: DailyProductivityRow[];
 }
 
-const fallbackSummary = legacyProductivitySummary as ProductivitySummary;
+const emptySummary: ProductivitySummary = {
+  producedKg: 0,
+  averageYield: 0,
+  workedDays: 0,
+  averageKgPerDay: 0,
+  records: 0,
+  daily: []
+};
 
 export default function ProductivityPage() {
-  const [weeks, setWeeks] = useState<WeekRow[]>(legacyWeeks);
-  const [weekId, setWeekId] = useState(preferredLegacyWeekId());
-  const [summary, setSummary] = useState<ProductivitySummary>(fallbackSummary);
-  const [message, setMessage] = useState(`${fallbackSummary.records} lancamento(s) de produtividade carregado(s) da planilha local.`);
+  const [weeks, setWeeks] = useState<WeekRow[]>([]);
+  const [weekId, setWeekId] = useState("");
+  const [summary, setSummary] = useState<ProductivitySummary>(emptySummary);
+  const [message, setMessage] = useState("Carregando produtividade da API.");
   const [loading, setLoading] = useState(false);
   const token = useMemo(() => getSession()?.accessToken, []);
 
@@ -51,12 +57,12 @@ export default function ProductivityPage() {
       setWeekId(selectedWeek);
       const query = selectedWeek ? `?weekId=${selectedWeek}` : "";
       const data = await apiGetClient<ProductivitySummary>(`/productivity/summary${query}`, token);
-      setSummary(data.records ? data : fallbackSummary);
-      setMessage(data.records ? "Produtividade carregada da API." : "Sem producao na semana selecionada; exibindo amostra operacional.");
+      setSummary(data);
+      setMessage(data.records ? "Produtividade carregada da API." : "Sem producao na semana selecionada.");
     } catch (error) {
-      setWeeks(legacyWeeks);
-      setSummary(fallbackSummary);
-      setMessage(error instanceof Error ? `${error.message} Produtividade da planilha local em uso.` : "Produtividade da planilha local em uso.");
+      setWeeks([]);
+      setSummary(emptySummary);
+      setMessage(error instanceof Error ? error.message : "Nao foi possivel carregar produtividade da API.");
     } finally {
       setLoading(false);
     }

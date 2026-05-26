@@ -24,9 +24,10 @@ interface DashboardCharts {
 }
 
 export function ExecutiveDashboard() {
+  const demoMode = process.env.NEXT_PUBLIC_DEMO_MODE === "true";
   const [realKpis, setRealKpis] = useState<DashboardKpis | null>(null);
   const [realCharts, setRealCharts] = useState<DashboardCharts | null>(null);
-  const [source, setSource] = useState("demo");
+  const [source, setSource] = useState(demoMode ? "demo" : "pending");
 
   useEffect(() => {
     const token = getSession()?.accessToken;
@@ -40,8 +41,8 @@ export function ExecutiveDashboard() {
         setRealCharts(chartData);
         setSource("api");
       })
-      .catch(() => setSource("demo"));
-  }, []);
+      .catch(() => setSource(demoMode ? "demo" : "empty"));
+  }, [demoMode]);
 
   const dashboardKpis = realKpis
     ? [
@@ -57,7 +58,7 @@ export function ExecutiveDashboard() {
   const sectorBars = realCharts?.productionBySector?.length
     ? realCharts.productionBySector
     : [
-        { sector: "P1", producedKg: productionByDay.reduce((sum, item) => sum + item.p1, 0), lossesKg: 74.31, overweightKg: 441.68 },
+        { sector: "P1", producedKg: productionByDay.reduce((sum, item) => sum + item.p1, 0), lossesKg: 0, overweightKg: 0 },
         { sector: "P2", producedKg: productionByDay.reduce((sum, item) => sum + item.p2, 0), lossesKg: 0, overweightKg: 0 }
       ];
   const reasonBars = realCharts?.downtimeByReason?.length
@@ -67,7 +68,7 @@ export function ExecutiveDashboard() {
   return (
     <div className="space-y-6">
       <div className="rounded-md border border-[var(--line)] bg-white/5 px-3 py-2 text-sm text-slate-300">
-        Fonte do dashboard: {source === "api" ? "API conectada ao banco" : "dados demonstrativos ate login/API estar disponivel"}
+        Fonte do dashboard: {source === "api" ? "API conectada ao banco" : source === "demo" ? "DEMO_MODE com dados ficticios" : "sem dados carregados da API"}
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
@@ -126,10 +127,10 @@ export function ExecutiveDashboard() {
                 type: "pie",
                 radius: ["48%", "72%"],
                 data: [
-                  { name: "Pesagem", value: 74.31 },
-                  { name: "Sobrepeso", value: 441.68 },
-                  { name: "Embalagem", value: 20 },
-                  { name: "Caixa", value: 6 }
+                  { name: "Pesagem", value: realKpis?.lossesTotalKg ?? 0 },
+                  { name: "Sobrepeso", value: realKpis?.overweightTotalKg ?? 0 },
+                  { name: "Embalagem", value: 0 },
+                  { name: "Caixa", value: 0 }
                 ]
               }
             ]

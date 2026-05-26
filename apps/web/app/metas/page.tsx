@@ -19,15 +19,9 @@ interface GoalRow {
   updatedAt?: string;
 }
 
-const fallbackGoals: GoalRow[] = [
-  { id: "goal-overweight", name: "Sobrepeso maximo", metric: "overweight", sectorCode: "P1", targetValue: 0.02, comparator: "<=", active: true },
-  { id: "goal-yield", name: "Rendimento minimo", metric: "yield", sectorCode: null, targetValue: 0.95, comparator: ">=", active: true },
-  { id: "goal-losses", name: "Perdas semanais", metric: "losses_kg", sectorCode: "P1", targetValue: 50, comparator: "<=", active: true }
-];
-
 export default function GoalsPage() {
-  const [goals, setGoals] = useState<GoalRow[]>(fallbackGoals);
-  const [name, setName] = useState("Meta operacional");
+  const [goals, setGoals] = useState<GoalRow[]>([]);
+  const [name, setName] = useState("");
   const [metric, setMetric] = useState("yield");
   const [sectorCode, setSectorCode] = useState("");
   const [targetValue, setTargetValue] = useState(0.95);
@@ -41,10 +35,11 @@ export default function GoalsPage() {
     setLoading(true);
     try {
       const data = await apiGetClient<GoalRow[]>("/goals", token);
-      setGoals(data.length ? data : fallbackGoals);
-      setMessage(data.length ? `${data.length} meta(s) carregada(s) da API.` : "Nenhuma meta cadastrada; exibindo amostra operacional.");
+      setGoals(data);
+      setMessage(data.length ? `${data.length} meta(s) carregada(s) da API.` : "Nenhuma meta cadastrada.");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Metas demonstrativas em uso.");
+      setGoals([]);
+      setMessage(error instanceof Error ? error.message : "Nao foi possivel carregar metas da API.");
     } finally {
       setLoading(false);
     }

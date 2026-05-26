@@ -52,7 +52,7 @@ function asDowntime(data: unknown): DowntimePayload[] {
 
 export function MeetingMode() {
   const [deck, setDeck] = useState<ExecutiveDeck | null>(null);
-  const [message, setMessage] = useState("Preview executivo local ativo.");
+  const [message, setMessage] = useState("Aguardando API para gerar apresentacao executiva.");
 
   async function loadDeck() {
     const token = getSession()?.accessToken;

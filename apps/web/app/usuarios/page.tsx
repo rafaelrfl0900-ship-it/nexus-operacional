@@ -27,15 +27,11 @@ const roleOptions: Array<{ value: RoleCode; label: string }> = [
   { value: "VIEWER", label: "Visualizador" }
 ];
 
-const fallbackUsers: UserRow[] = [
-  { id: "admin-local", email: "admin@nexus.local", name: "Administrador Nexus", active: true, lastLoginAt: null, roles: [{ role: { code: "ADMIN", name: "Administrador" } }] }
-];
-
 export default function UsersPage() {
-  const [users, setUsers] = useState<UserRow[]>(fallbackUsers);
-  const [name, setName] = useState("Operador Nexus");
-  const [email, setEmail] = useState("operador@nexus.local");
-  const [password, setPassword] = useState("ChangeMe!2026");
+  const [users, setUsers] = useState<UserRow[]>([]);
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [roles, setRoles] = useState<RoleCode[]>(["VIEWER"]);
   const [message, setMessage] = useState("Aguardando login de administrador para carregar usuarios reais.");
   const [loading, setLoading] = useState(false);
@@ -46,10 +42,11 @@ export default function UsersPage() {
     setLoading(true);
     try {
       const data = await apiGetClient<UserRow[]>("/users", token);
-      setUsers(data.length ? data : fallbackUsers);
-      setMessage(data.length ? `${data.length} usuario(s) carregado(s) da API.` : "Nenhum usuario retornado; exibindo admin inicial.");
+      setUsers(data);
+      setMessage(data.length ? `${data.length} usuario(s) carregado(s) da API.` : "Nenhum usuario retornado pela API.");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Usuarios demonstrativos em uso.");
+      setUsers([]);
+      setMessage(error instanceof Error ? error.message : "Nao foi possivel carregar usuarios da API.");
     } finally {
       setLoading(false);
     }

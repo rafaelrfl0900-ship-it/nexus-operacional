@@ -12,6 +12,7 @@ interface JwtClaims {
 
 interface HttpRequestWithUser {
   headers: Record<string, string | string[] | undefined>;
+  cookies?: Record<string, string | undefined>;
   user?: CurrentUser;
 }
 
@@ -30,7 +31,7 @@ export class JwtAuthGuard implements CanActivate {
     if (isPublic) return true;
 
     const request = context.switchToHttp().getRequest<HttpRequestWithUser>();
-    const token = this.extractBearerToken(request.headers.authorization);
+    const token = this.extractBearerToken(request.headers.authorization) ?? this.extractCookieToken(request);
     if (!token) {
       throw new UnauthorizedException("Sessao ausente ou expirada.");
     }
@@ -57,5 +58,22 @@ export class JwtAuthGuard implements CanActivate {
     if (!value) return null;
     const [scheme, token] = value.split(" ");
     return scheme?.toLowerCase() === "bearer" && token ? token : null;
+  }
+
+  private extractCookieToken(request: HttpRequestWithUser) {
+    if (request.cookies?.nexus_session) return request.cookies.nexus_session;
+
+    const rawCookie = request.headers.cookie;
+    const cookieHeader = Array.isArray(rawCookie) ? rawCookie.join("; ") : rawCookie;
+    if (!cookieHeader) return null;
+
+    const cookies = cookieHeader.split(";").map((part) => part.trim());
+    for (const cookie of cookies) {
+      const [name, ...valueParts] = cookie.split("=");
+      if (name === "nexus_session") {
+        return decodeURIComponent(valueParts.join("="));
+      }
+    }
+    return null;
   }
 }

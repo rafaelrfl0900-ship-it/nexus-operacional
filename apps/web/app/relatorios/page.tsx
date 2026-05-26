@@ -6,7 +6,6 @@ import { PageHeader } from "@/components/layout/page-header";
 import { DataTable } from "@/components/tables/data-table";
 import { Button } from "@/components/ui/button";
 import { Card, StatCard } from "@/components/ui/card";
-import { legacyProductionEntries } from "@/lib/legacy-data";
 import { apiGetClient, getSession } from "@/services/api";
 
 interface WeeklyReport {
@@ -21,29 +20,9 @@ export default function ReportsPage() {
   const [loading, setLoading] = useState(false);
   const token = useMemo(() => getSession()?.accessToken, []);
 
-  function buildLegacyCsv(): WeeklyReport {
-    const header = "Data,Setor,Codigo,Produto,OP,ProduzidoKg,Rendimento,SobrepesoKg,Status";
-    const rows = legacyProductionEntries.map((entry) =>
-      [
-        entry.date,
-        entry.sector,
-        entry.product?.code ?? "",
-        `"${(entry.product?.name ?? "").replaceAll('"', '""')}"`,
-        entry.productionOrder,
-        entry.producedKg,
-        entry.realYieldPercent,
-        entry.overweightTotalKg,
-        entry.status
-      ].join(",")
-    );
-    return { exportId: "legacy-planilha-maio-2026", format: "csv", csv: [header, ...rows].join("\n") };
-  }
-
   async function generateCsv() {
     if (!token) {
-      const data = buildLegacyCsv();
-      setReport(data);
-      setMessage(`Relatorio CSV gerado com ${legacyProductionEntries.length} lancamento(s) da planilha local.`);
+      setMessage("Entre no sistema para gerar relatorios reais.");
       return;
     }
     setLoading(true);
@@ -52,9 +31,8 @@ export default function ReportsPage() {
       setReport(data);
       setMessage(`Relatorio CSV gerado. Export ID: ${data.exportId}`);
     } catch (error) {
-      const data = buildLegacyCsv();
-      setReport(data);
-      setMessage(error instanceof Error ? `${error.message} CSV da planilha local gerado.` : "CSV da planilha local gerado.");
+      setReport(null);
+      setMessage(error instanceof Error ? error.message : "Nao foi possivel gerar relatorio pela API.");
     } finally {
       setLoading(false);
     }

@@ -19,11 +19,6 @@ interface AuditRow {
   user?: { email: string } | null;
 }
 
-const fallbackRows = [
-  { Quando: "-", Usuario: "-", Modulo: "products", Acao: "create", Entidade: "Product", Motivo: "Aguardando banco" },
-  { Quando: "-", Usuario: "-", Modulo: "weeks", Acao: "reopen", Entidade: "WeeklyPeriod", Motivo: "Aguardando banco" }
-];
-
 export default function AuditPage() {
   const [rows, setRows] = useState<AuditRow[]>([]);
   const [message, setMessage] = useState("Aguardando login para carregar auditoria real.");
@@ -38,7 +33,8 @@ export default function AuditPage() {
       setRows(data);
       setMessage(`${data.length} evento(s) de auditoria carregado(s).`);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Auditoria demonstrativa em uso.");
+      setRows([]);
+      setMessage(error instanceof Error ? error.message : "Nao foi possivel carregar auditoria da API.");
     } finally {
       setLoading(false);
     }
@@ -61,7 +57,7 @@ export default function AuditPage() {
         <p className="text-sm text-slate-300">{message}</p>
       </Card>
       <div className="grid gap-4 md:grid-cols-3">
-        <StatCard label="Eventos listados" value={String(rows.length || 2)} status="OK" />
+        <StatCard label="Eventos listados" value={String(rows.length)} status="OK" />
         <StatCard label="Retencao" value="Permanente" />
         <StatCard label="Soft delete" value="Ativo" status="OK" />
       </div>
@@ -77,7 +73,7 @@ export default function AuditPage() {
                 Entidade: row.entity,
                 Motivo: row.reason ?? "-"
               }))
-            : fallbackRows
+            : [{ Quando: "-", Usuario: "-", Modulo: "-", Acao: "Nenhum evento carregado.", Entidade: "-", Motivo: "-" }]
         }
       />
     </div>

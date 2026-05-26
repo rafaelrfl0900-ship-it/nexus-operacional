@@ -7,7 +7,6 @@ import { DataTable } from "@/components/tables/data-table";
 import { Button } from "@/components/ui/button";
 import { Card, StatCard } from "@/components/ui/card";
 import { formatKg } from "@/lib/format";
-import { legacyLossEntries, legacyLossTypes, legacyWeeks, preferredLegacyWeekId } from "@/lib/legacy-data";
 import { apiGetClient, apiPostClient, getSession } from "@/services/api";
 
 interface WeekRow {
@@ -31,25 +30,23 @@ interface LossEntryRow {
 }
 
 export default function LossesPage() {
-  const fallbackWeekId = preferredLegacyWeekId();
-  const fallbackEntries = useMemo(() => legacyLossEntries.filter((entry) => entry.weekId === fallbackWeekId), [fallbackWeekId]);
-  const [weeks, setWeeks] = useState<WeekRow[]>(legacyWeeks);
-  const [types, setTypes] = useState<LossTypeRow[]>(legacyLossTypes);
-  const [entries, setEntries] = useState<LossEntryRow[]>(fallbackEntries);
-  const [weekId, setWeekId] = useState(fallbackWeekId);
-  const [lossTypeId, setLossTypeId] = useState(legacyLossTypes[0]?.id ?? "");
+  const [weeks, setWeeks] = useState<WeekRow[]>([]);
+  const [types, setTypes] = useState<LossTypeRow[]>([]);
+  const [entries, setEntries] = useState<LossEntryRow[]>([]);
+  const [weekId, setWeekId] = useState("");
+  const [lossTypeId, setLossTypeId] = useState("");
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [sector, setSector] = useState<"P1" | "P2">("P1");
   const [quantityKg, setQuantityKg] = useState(10);
   const [reason, setReason] = useState("Lancamento operacional");
-  const [message, setMessage] = useState(`${fallbackEntries.length} perda(s) carregada(s) da planilha local.`);
+  const [message, setMessage] = useState("Carregando perdas da API.");
   const [loading, setLoading] = useState(false);
   const token = useMemo(() => getSession()?.accessToken, []);
 
   async function loadData(nextWeekId = weekId) {
-    const requestedWeek = nextWeekId || weekId || fallbackWeekId;
+    const requestedWeek = nextWeekId || weekId;
     if (!token) {
-      setEntries(legacyLossEntries.filter((entry) => entry.weekId === requestedWeek));
+      setEntries([]);
       return;
     }
     setLoading(true);
@@ -69,10 +66,10 @@ export default function LossesPage() {
       }
       setMessage("Perdas carregadas da API.");
     } catch (error) {
-      setWeeks(legacyWeeks);
-      setTypes(legacyLossTypes);
-      setEntries(legacyLossEntries.filter((entry) => entry.weekId === requestedWeek));
-      setMessage(error instanceof Error ? `${error.message} Perdas da planilha local em uso.` : "Perdas da planilha local em uso.");
+      setWeeks([]);
+      setTypes([]);
+      setEntries([]);
+      setMessage(error instanceof Error ? error.message : "Nao foi possivel carregar perdas da API.");
     } finally {
       setLoading(false);
     }
@@ -108,13 +105,7 @@ export default function LossesPage() {
         Quantidade: formatKg(Number(entry.quantityKg)),
         Motivo: entry.reason ?? "-"
       }))
-    : legacyLossEntries.slice(0, 10).map((entry) => ({
-        Data: entry.date.slice(0, 10),
-        Setor: entry.sector?.code ?? "-",
-        Tipo: entry.lossType?.name ?? "-",
-        Quantidade: formatKg(Number(entry.quantityKg)),
-        Motivo: entry.reason ?? "-"
-      }));
+    : [{ Data: "-", Setor: "-", Tipo: "Nenhuma perda carregada.", Quantidade: "-", Motivo: "-" }];
 
   return (
     <div className="space-y-6">
@@ -141,9 +132,9 @@ export default function LossesPage() {
         <p className="mt-4 text-sm text-slate-300">{message}</p>
       </Card>
       <div className="grid gap-4 md:grid-cols-3">
-        <StatCard label="Perdas da semana" value={formatKg(total || 74.3)} status={(total || 74.3) > 50 ? "ATTENTION" : "OK"} />
-        <StatCard label="Registros" value={String(entries.length || 2)} />
-        <StatCard label="Meta semanal" value="< 50 kg" status={(total || 74.3) > 50 ? "ATTENTION" : "OK"} />
+        <StatCard label="Perdas da semana" value={formatKg(total)} status={total > 50 ? "ATTENTION" : "OK"} />
+        <StatCard label="Registros" value={String(entries.length)} />
+        <StatCard label="Meta semanal" value="< 50 kg" status={total > 50 ? "ATTENTION" : "OK"} />
       </div>
       <DataTable title="Perdas" rows={rows} />
     </div>

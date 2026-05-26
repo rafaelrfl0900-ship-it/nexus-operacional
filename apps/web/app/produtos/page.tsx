@@ -8,7 +8,6 @@ import { Button } from "@/components/ui/button";
 import { Card, StatCard } from "@/components/ui/card";
 import { apiDeleteClient, apiGetClient, getSession } from "@/services/api";
 import { formatKg } from "@/lib/format";
-import { legacyProducts } from "@/lib/legacy-data";
 
 interface ProductRow {
   id: string;
@@ -24,12 +23,10 @@ interface ProductRow {
   } | null;
 }
 
-const fallbackProducts = legacyProducts as ProductRow[];
-
 export default function ProductsPage() {
-  const [products, setProducts] = useState<ProductRow[]>(fallbackProducts);
+  const [products, setProducts] = useState<ProductRow[]>([]);
   const [search, setSearch] = useState("");
-  const [message, setMessage] = useState(`${fallbackProducts.length} produto(s) carregado(s) da planilha local.`);
+  const [message, setMessage] = useState("Carregando catalogo de produtos da API.");
   const [loading, setLoading] = useState(false);
   const token = useMemo(() => getSession()?.accessToken, []);
 
@@ -42,8 +39,8 @@ export default function ProductsPage() {
       setProducts(data);
       setMessage(`${data.length} produto(s) carregado(s) da API.`);
     } catch (error) {
-      setProducts(fallbackProducts);
-      setMessage(error instanceof Error ? `${error.message} Catalogo da planilha local em uso.` : "Catalogo da planilha local em uso.");
+      setProducts([]);
+      setMessage(error instanceof Error ? error.message : "Nao foi possivel carregar produtos da API.");
     } finally {
       setLoading(false);
     }
@@ -54,8 +51,8 @@ export default function ProductsPage() {
   }, []);
 
   async function deactivate(id: string) {
-    if (!token || id.startsWith("legacy-")) {
-      setMessage("Entre no sistema e carregue produtos reais para inativar.");
+    if (!token) {
+      setMessage("Entre no sistema para inativar produtos.");
       return;
     }
     await apiDeleteClient(`/products/${id}`, token);

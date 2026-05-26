@@ -19,31 +19,26 @@ interface AuditRow {
   user?: { email: string; name: string } | null;
 }
 
-const fallbackRows: AuditRow[] = [
-  { id: "hist-1", module: "production", action: "create", entity: "ProductionEntry", entityId: "preview", createdAt: new Date().toISOString(), user: { email: "system@nexus.local", name: "Sistema" } },
-  { id: "hist-2", module: "weeks", action: "close", entity: "WeeklyPeriod", entityId: "preview", reason: "Conferencia semanal", createdAt: new Date().toISOString(), user: { email: "admin@nexus.local", name: "Administrador" } }
-];
-
 export default function HistoryPage() {
-  const [rows, setRows] = useState<AuditRow[]>(fallbackRows);
+  const [rows, setRows] = useState<AuditRow[]>([]);
   const [moduleFilter, setModuleFilter] = useState("");
   const [message, setMessage] = useState("Aguardando sessao para carregar historico real.");
 
   async function load() {
     const token = getSession()?.accessToken;
     if (!token) {
-      setRows(fallbackRows);
-      setMessage("Preview local ativo. Entre no sistema para ver historico auditado do banco.");
+      setRows([]);
+      setMessage("Entre no sistema para ver historico auditado do banco.");
       return;
     }
 
     try {
       const query = moduleFilter ? `?take=100&module=${encodeURIComponent(moduleFilter)}` : "?take=100";
       const data = await apiGetClient<AuditRow[]>(`/audit${query}`, token);
-      setRows(data.length ? data : fallbackRows);
+      setRows(data);
       setMessage(`${data.length} evento(s) historico(s) carregado(s).`);
     } catch (error) {
-      setRows(fallbackRows);
+      setRows([]);
       setMessage(error instanceof Error ? error.message : "Nao foi possivel carregar o historico.");
     }
   }

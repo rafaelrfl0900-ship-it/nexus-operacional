@@ -7,7 +7,7 @@ Este projeto suporta dois modelos de publicacao:
 
 ## GitHub Pages
 
-O workflow `.github/workflows/pages.yml` valida o projeto e publica o frontend estatico quando houver push na branch `main`.
+O workflow `.github/workflows/pages.yml` ficou restrito a acionamento manual e deve ser usado somente como demonstracao publica sem dados reais.
 
 Etapas executadas no CI:
 
@@ -25,7 +25,7 @@ URL esperada:
 https://rafaelrfl0900-ship-it.github.io/nexus-operacional/
 ```
 
-Esse modo publica somente o frontend. Para login real, importacao, backups e banco de dados, a API precisa estar publicada separadamente e `NEXT_PUBLIC_API_URL` deve apontar para ela.
+Esse modo publica somente o frontend e nao e o deploy operacional. Para login real, importacao, backups e banco de dados, use o deploy completo protegido com API e PostgreSQL.
 
 ## Docker Compose completo
 

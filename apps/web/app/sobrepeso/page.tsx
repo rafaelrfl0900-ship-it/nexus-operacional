@@ -7,7 +7,6 @@ import { DataTable } from "@/components/tables/data-table";
 import { Button } from "@/components/ui/button";
 import { Card, StatCard } from "@/components/ui/card";
 import { formatKg, formatPercent } from "@/lib/format";
-import { legacyOverweightRanking, legacyWeeks, preferredLegacyWeekId } from "@/lib/legacy-data";
 import { apiGetClient, getSession } from "@/services/api";
 
 interface WeekRow {
@@ -28,13 +27,11 @@ interface OverweightRow {
   status: string;
 }
 
-const fallbackRanking = legacyOverweightRanking as OverweightRow[];
-
 export default function OverweightPage() {
-  const [weeks, setWeeks] = useState<WeekRow[]>(legacyWeeks);
-  const [weekId, setWeekId] = useState(preferredLegacyWeekId());
-  const [ranking, setRanking] = useState<OverweightRow[]>(fallbackRanking);
-  const [message, setMessage] = useState(`${fallbackRanking.length} produto(s) no ranking da planilha local.`);
+  const [weeks, setWeeks] = useState<WeekRow[]>([]);
+  const [weekId, setWeekId] = useState("");
+  const [ranking, setRanking] = useState<OverweightRow[]>([]);
+  const [message, setMessage] = useState("Carregando ranking de sobrepeso da API.");
   const [loading, setLoading] = useState(false);
   const token = useMemo(() => getSession()?.accessToken, []);
 
@@ -48,12 +45,12 @@ export default function OverweightPage() {
       setWeekId(selectedWeek);
       const query = selectedWeek ? `?weekId=${selectedWeek}` : "";
       const data = await apiGetClient<OverweightRow[]>(`/overweight/ranking${query}`, token);
-      setRanking(data.length ? data : fallbackRanking);
-      setMessage(data.length ? "Ranking de sobrepeso carregado da API." : "Sem producao na semana selecionada; exibindo amostra operacional.");
+      setRanking(data);
+      setMessage(data.length ? "Ranking de sobrepeso carregado da API." : "Sem producao na semana selecionada.");
     } catch (error) {
-      setWeeks(legacyWeeks);
-      setRanking(fallbackRanking);
-      setMessage(error instanceof Error ? `${error.message} Ranking da planilha local em uso.` : "Ranking da planilha local em uso.");
+      setWeeks([]);
+      setRanking([]);
+      setMessage(error instanceof Error ? error.message : "Nao foi possivel carregar ranking da API.");
     } finally {
       setLoading(false);
     }

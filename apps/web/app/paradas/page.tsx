@@ -6,7 +6,6 @@ import { PageHeader } from "@/components/layout/page-header";
 import { DataTable } from "@/components/tables/data-table";
 import { Button } from "@/components/ui/button";
 import { Card, StatCard } from "@/components/ui/card";
-import { legacyDowntimeEntries, legacyDowntimeReasons, legacyWeeks, preferredLegacyWeekId } from "@/lib/legacy-data";
 import { apiGetClient, apiPostClient, getSession } from "@/services/api";
 
 interface WeekRow {
@@ -35,13 +34,11 @@ function at(date: string, time: string) {
 }
 
 export default function DowntimePage() {
-  const fallbackWeekId = preferredLegacyWeekId();
-  const fallbackEntries = useMemo(() => legacyDowntimeEntries.filter((entry) => entry.weekId === fallbackWeekId), [fallbackWeekId]);
-  const [weeks, setWeeks] = useState<WeekRow[]>(legacyWeeks);
-  const [reasons, setReasons] = useState<ReasonRow[]>(legacyDowntimeReasons);
-  const [entries, setEntries] = useState<DowntimeEntryRow[]>(fallbackEntries);
-  const [weekId, setWeekId] = useState(fallbackWeekId);
-  const [reasonId, setReasonId] = useState(legacyDowntimeReasons[0]?.id ?? "");
+  const [weeks, setWeeks] = useState<WeekRow[]>([]);
+  const [reasons, setReasons] = useState<ReasonRow[]>([]);
+  const [entries, setEntries] = useState<DowntimeEntryRow[]>([]);
+  const [weekId, setWeekId] = useState("");
+  const [reasonId, setReasonId] = useState("");
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [sector, setSector] = useState<"P1" | "P2">("P1");
   const [productionStart, setProductionStart] = useState("08:00");
@@ -49,14 +46,14 @@ export default function DowntimePage() {
   const [downtimeStart, setDowntimeStart] = useState("10:00");
   const [downtimeEnd, setDowntimeEnd] = useState("10:20");
   const [producedMassKg, setProducedMassKg] = useState(5000);
-  const [message, setMessage] = useState(`${fallbackEntries.length} parada(s) carregada(s) da planilha local.`);
+  const [message, setMessage] = useState("Carregando paradas da API.");
   const [loading, setLoading] = useState(false);
   const token = useMemo(() => getSession()?.accessToken, []);
 
   async function loadData(nextWeekId = weekId) {
-    const requestedWeek = nextWeekId || weekId || fallbackWeekId;
+    const requestedWeek = nextWeekId || weekId;
     if (!token) {
-      setEntries(legacyDowntimeEntries.filter((entry) => entry.weekId === requestedWeek));
+      setEntries([]);
       return;
     }
     setLoading(true);
@@ -76,10 +73,10 @@ export default function DowntimePage() {
       }
       setMessage("Paradas carregadas da API.");
     } catch (error) {
-      setWeeks(legacyWeeks);
-      setReasons(legacyDowntimeReasons);
-      setEntries(legacyDowntimeEntries.filter((entry) => entry.weekId === requestedWeek));
-      setMessage(error instanceof Error ? `${error.message} Paradas da planilha local em uso.` : "Paradas da planilha local em uso.");
+      setWeeks([]);
+      setReasons([]);
+      setEntries([]);
+      setMessage(error instanceof Error ? error.message : "Nao foi possivel carregar paradas da API.");
     } finally {
       setLoading(false);
     }
@@ -130,13 +127,7 @@ export default function DowntimePage() {
         Tempo: `${Number(entry.stoppedMinutes).toLocaleString("pt-BR")} min`,
         Status: entry.status
       }))
-    : legacyDowntimeEntries.slice(0, 10).map((entry) => ({
-        Data: entry.date.slice(0, 10),
-        Setor: entry.sector?.code ?? "-",
-        Motivo: entry.reason?.name ?? "-",
-        Tempo: `${Number(entry.stoppedMinutes).toLocaleString("pt-BR")} min`,
-        Status: entry.status
-      }));
+    : [{ Data: "-", Setor: "-", Motivo: "Nenhuma parada carregada.", Tempo: "-", Status: "-" }];
 
   return (
     <div className="space-y-6">
@@ -166,8 +157,8 @@ export default function DowntimePage() {
         <p className="mt-4 text-sm text-slate-300">{message}</p>
       </Card>
       <div className="grid gap-4 md:grid-cols-3">
-        <StatCard label="Tempo parado" value={`${(stoppedTotal || 941).toLocaleString("pt-BR")} min`} status="MEDIUM" />
-        <StatCard label="Registros" value={String(entries.length || 2)} />
+        <StatCard label="Tempo parado" value={`${stoppedTotal.toLocaleString("pt-BR")} min`} status={stoppedTotal > 120 ? "MEDIUM" : "OK"} />
+        <StatCard label="Registros" value={String(entries.length)} />
         <StatCard label="Status operacional" value={stoppedTotal > 120 ? "Atencao" : "OK"} status={stoppedTotal > 120 ? "ATTENTION" : "OK"} />
       </div>
       <DataTable title="Paradas" rows={rows} />

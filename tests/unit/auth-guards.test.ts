@@ -35,6 +35,17 @@ describe("auth guards", () => {
     expect(request.user).toEqual({ id: "user-1", email: "admin@nexus.local", roles: ["ADMIN"] });
   });
 
+  it("attaches the current user from the HTTP-only session cookie", async () => {
+    const request: Record<string, unknown> = { headers: { cookie: "nexus_session=token" } };
+    const guard = new JwtAuthGuard(
+      { getAllAndOverride: () => false } as never,
+      { verifyAsync: async () => ({ sub: "user-1", email: "admin@nexus.local", roles: ["ADMIN"] }) } as never
+    );
+
+    await expect(guard.canActivate(httpContext(request))).resolves.toBe(true);
+    expect(request.user).toEqual({ id: "user-1", email: "admin@nexus.local", roles: ["ADMIN"] });
+  });
+
   it("blocks users outside the required role set", () => {
     const guard = new RolesGuard({
       getAllAndOverride: (key: string) => (key === ROLES_KEY ? ["MANAGER"] : false)
